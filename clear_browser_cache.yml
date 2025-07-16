@@ -1,0 +1,44 @@
+- name: Clear Chrome and Firefox cache on Windows
+  hosts: windows
+  gather_facts: true
+  tasks:
+
+    #########################################
+    # 🔹 Clear Chrome Cache
+    #########################################
+    - name: Remove Chrome cache folder
+      ansible.windows.win_file:
+        path: "C:\\Users\\{{ ansible_user }}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache"
+        state: absent
+
+    - name: Recreate Chrome cache folder
+      ansible.windows.win_file:
+        path: "C:\\Users\\{{ ansible_user }}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache"
+        state: directory
+
+    #########################################
+    # 🔹 Find Firefox Profile in Local AppData
+    #########################################
+    - name: Find Firefox profiles (default-release) in LOCALAPPDATA
+      win_find:
+        paths: "C:\\Users\\{{ ansible_user }}\\AppData\\Local\\Mozilla\\Firefox\\Profiles"
+        patterns: "*.default-release"
+        file_type: directory
+      register: firefox_profiles
+
+    #########################################
+    # 🔹 Clear Firefox cache2 folders
+    #########################################
+    - name: Remove Firefox cache2 folder if exists
+      ansible.windows.win_file:
+        path: "{{ item.path }}\\cache2"
+        state: absent
+      loop: "{{ firefox_profiles.files }}"
+      when: firefox_profiles.matched > 0
+
+    - name: Recreate Firefox cache2 folder
+      ansible.windows.win_file:
+        path: "{{ item.path }}\\cache2"
+        state: directory
+      loop: "{{ firefox_profiles.files }}"
+      when: firefox_profiles.matched > 0
