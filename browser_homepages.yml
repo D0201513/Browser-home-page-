@@ -1,0 +1,47 @@
+- name: Set and lock homepage for Chrome and Firefox
+  hosts: windows
+  gather_facts: true
+
+  tasks:
+    # ✅ Chrome Settings
+    - name: Set Chrome homepage to new tab
+      ansible.windows.win_regedit:
+        path: HKLM:\Software\Policies\Google\Chrome
+        name: HomepageLocation
+        data: "chrome://newtab"
+        type: string
+
+    - name: Force Chrome to open homepage on startup
+      ansible.windows.win_regedit:
+        path: HKLM:\Software\Policies\Google\Chrome
+        name: RestoreOnStartup
+        data: 1
+        type: dword
+
+    - name: Lock Chrome homepage to prevent changes
+      ansible.windows.win_regedit:
+        path: HKLM:\Software\Policies\Google\Chrome
+        name: HomepageLocationIsLocked
+        data: 1
+        type: dword
+
+    # 🟠 Firefox Settings
+    - name: Create Firefox policy directory
+      ansible.windows.win_file:
+        path: "C:\\Program Files\\Mozilla Firefox\\distribution"
+        state: directory
+
+    - name: Set Firefox homepage to about:newtab and lock it
+      ansible.windows.win_copy:
+        dest: "C:\\Program Files\\Mozilla Firefox\\distribution\\policies.json"
+        content: |
+          {
+            "policies": {
+              "Homepage": {
+                "URL": "about:newtab",
+                "Locked": true
+              },
+              "DisableSetDesktopBackground": true,
+              "BlockAboutConfig": true
+            }
+          }
