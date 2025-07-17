@@ -2,7 +2,6 @@
 - name: Clear Chrome and Firefox cache for all users
   hosts: windows
   gather_facts: false
-
   tasks:
 
     - name: Get all user folders
@@ -13,17 +12,17 @@
 
     - name: Filter valid user profiles (skip system folders)
       set_fact:
-        valid_users: >
-          {{ user_dirs.files
-             | rejectattr('path', 'search', 'Default')
-             | rejectattr('path', 'search', 'Public')
-             | rejectattr('path', 'search', 'All Users')
-             | rejectattr('path', 'search', 'Administrator')
-             | map(attribute='path') | list }}
+        valid_users: >-
+          {{
+            user_dirs.files
+            | map(attribute='path')
+            | select('match', '^C:\\\\Users\\\\(?!Public|Default|All Users|Default User|defaultuser0|WDAGUtilityAccount).*')
+            | list
+          }}
 
-    - name: Kill Firefox if running
-      win_shell: Stop-Process -Name firefox -Force
-      ignore_errors: yes
+    - name: Kill Firefox process to unlock cache
+      win_shell: taskkill /F /IM firefox.exe
+      ignore_errors: true
 
     - name: Clear Chrome cache for all users
       win_file:
@@ -31,19 +30,26 @@
         state: absent
       loop: "{{ valid_users }}"
 
-    - name: Find Firefox cache2/entries directories
+    - name: Find Firefox cache2 folders
       win_find:
         paths: "{{ item }}\\AppData\\Local\\Mozilla\\Firefox\\Profiles"
-        patterns: entries
+        patterns: "cache2"
         file_type: directory
-        recurse: yes
+      register: firefox_cache_folders
       loop: "{{ valid_users }}"
       loop_control:
         label: "{{ item }}"
-      register: ff_cache_entries
 
-    - name: Remove all Firefox cache2/entries directories found
+    - name: Delete 'entries' folder inside Firefox cache2
       win_file:
-        path: "{{ item.path }}"
+        path: "{{ item.path }}\\entries"
         state: absent
-      loop: "{{ ff_cache_entries.results | map(attribute='files') | sum(start=[]) }}"
+      loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
+      when: item.path is defined
+
+    - name: Recreate empty 'entries' folder (optional)
+      win_file:
+        path: "{{ item.path }}\\entries"
+        state: directory
+      loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
+      when: item.path is defined
