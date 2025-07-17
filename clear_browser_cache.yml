@@ -11,6 +11,10 @@
         file_type: directory
       register: user_dirs
 
+    - name: Show user_dirs found under C:\Users
+      debug:
+        var: user_dirs.files
+
     - name: Filter valid user profiles (skip system folders)
       set_fact:
         valid_users: >-
@@ -21,6 +25,10 @@
             | list
           }}
 
+    - name: Show filtered valid_users
+      debug:
+        var: valid_users
+
     - name: Kill Firefox process if running
       win_shell: taskkill /F /IM firefox.exe
       register: kill_firefox_result
@@ -29,13 +37,15 @@
 
     - name: Show result of Firefox kill
       debug:
-        msg: "{{ kill_firefox_result.stderr | default('No stderr') }}"
+        msg: "{{ kill_firefox_result.stderr | default('Firefox not running or already closed') }}"
 
     - name: Clear Chrome cache for all users
       win_file:
         path: "{{ item }}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache"
         state: absent
       loop: "{{ valid_users }}"
+      loop_control:
+        label: "{{ item }}"
 
     - name: Find all Firefox cache2 folders under each user
       win_find:
@@ -54,6 +64,8 @@
         state: absent
       loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
       when: item.path is defined
+      loop_control:
+        label: "{{ item.path }}"
 
     - name: (Optional) Recreate empty 'cache2' folder after cleanup
       win_file:
@@ -61,3 +73,5 @@
         state: directory
       loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
       when: item.path is defined
+      loop_control:
+        label: "{{ item.path }}"
