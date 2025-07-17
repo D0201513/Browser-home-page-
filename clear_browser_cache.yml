@@ -29,16 +29,6 @@
       debug:
         var: valid_users
 
-    - name: Kill Firefox process if running
-      win_shell: taskkill /F /IM firefox.exe
-      register: kill_firefox_result
-      ignore_errors: true
-      failed_when: false
-
-    - name: Show result of Firefox kill
-      debug:
-        msg: "{{ kill_firefox_result.stderr | default('Firefox not running or already closed') }}"
-
     - name: Clear Chrome cache for all users
       win_file:
         path: "{{ item }}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache"
