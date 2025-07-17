@@ -18,7 +18,12 @@
              | rejectattr('path', 'search', 'Default')
              | rejectattr('path', 'search', 'Public')
              | rejectattr('path', 'search', 'All Users')
+             | rejectattr('path', 'search', 'Administrator')
              | map(attribute='path') | list }}
+
+    - name: Kill Firefox if running
+      win_shell: Stop-Process -Name firefox -Force
+      ignore_errors: yes
 
     - name: Clear Chrome cache for all users
       win_file:
@@ -26,18 +31,19 @@
         state: absent
       loop: "{{ valid_users }}"
 
-    - name: Find Firefox cache folders under Profiles
+    - name: Find Firefox cache2/entries directories
       win_find:
         paths: "{{ item }}\\AppData\\Local\\Mozilla\\Firefox\\Profiles"
-        patterns: 'cache2'
+        patterns: entries
         file_type: directory
+        recurse: yes
       loop: "{{ valid_users }}"
       loop_control:
         label: "{{ item }}"
-      register: ff_caches
+      register: ff_cache_entries
 
-    - name: Remove all Firefox caches found
+    - name: Remove all Firefox cache2/entries directories found
       win_file:
         path: "{{ item.path }}"
         state: absent
-      loop: "{{ ff_caches.results | map(attribute='files') | sum(start=[]) }}"
+      loop: "{{ ff_cache_entries.results | map(attribute='files') | sum(start=[]) }}"
