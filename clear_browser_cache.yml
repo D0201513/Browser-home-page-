@@ -1,63 +1,69 @@
 ---
-- name: Clear Firefox cache2 for all non-system users on Windows
+- name: Clear Chrome and Firefox cache for all users
   hosts: windows
   gather_facts: false
+
   vars:
-    firefox_cache_pattern: "AppData\\Local\\Mozilla\\Firefox\\Profiles\\*\\cache2"
-    system_users:
-      - Administrator
-      - Default
-      - DefaultAppPool
+    skip_users: 
       - Public
+      - Default
       - All Users
-      - desktop.ini
+      - Default User
       - defaultuser0
+      - WDAGUtilityAccount
+      - Administrator
+      - DefaultAppPool
       - elastic-agent-user
+
   tasks:
 
-    - name: Get list of all user directories in C:\Users
+    - name: Get all user folders
       win_find:
-        paths: 'C:\Users'
+        paths: C:\Users
         file_type: directory
-        depth: 1
       register: user_dirs
 
-    - name: Extract usernames from folder paths
+    - name: Filter valid user profiles (skip system folders)
       set_fact:
-        all_usernames: "{{ user_dirs.files | map(attribute='path') | map('basename') | list }}"
+        valid_users: >-
+          {{
+            user_dirs.files
+            | map(attribute='path')
+            | reject('search', 'C:\\\\Users\\\\(' + skip_users | join('|') + ')$')
+            | list
+          }}
 
-    - name: Filter out system users
-      set_fact:
-        valid_users: "{{ all_usernames | difference(system_users) }}"
-
-    - name: Construct full user paths
-      set_fact:
-        valid_user_paths: "{{ valid_users | map('regex_replace', '^(.*)$', 'C:\\\\Users\\\\\\1') | list }}"
-
-    - name: Show filtered valid_user_paths
+    - name: Debug valid user list
       debug:
-        var: valid_user_paths
+        var: valid_users
 
-    - name: Find all Firefox cache2 folders for each valid user
+    - name: Clear Chrome cache for all users
+      win_file:
+        path: "{{ item }}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache"
+        state: absent
+      loop: "{{ valid_users }}"
+
+    - name: Find all Firefox cache2 folders under each user
       win_find:
-        paths: "{{ item }}\\{{ firefox_cache_pattern }}"
+        paths: "{{ item }}\\AppData\\Local\\Mozilla\\Firefox\\Profiles"
+        patterns: cache2
+        recurse: true
         file_type: directory
-      loop: "{{ valid_user_paths }}"
-      register: firefox_cache_dirs
-      ignore_errors: yes
-
-    - name: Flatten found Firefox cache2 paths
-      set_fact:
-        all_firefox_cache2_paths: "{{ firefox_cache_dirs.results | map(attribute='files') | sum(start=[]) | map(attribute='path') | list }}"
+      loop: "{{ valid_users }}"
+      loop_control:
+        label: "{{ item }}"
+      register: firefox_cache_folders
 
     - name: Delete entire Firefox 'cache2' folders
       win_file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: absent
-      loop: "{{ all_firefox_cache2_paths }}"
+      loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
+      when: item.path is defined
 
-    - name: (Optional) Recreate empty 'cache2' folder after cleanup
+    - name: (Optional) Recreate empty 'cache2' folders after cleanup
       win_file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
-      loop: "{{ all_firefox_cache2_paths }}"
+      loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
+      when: item.path is defined
