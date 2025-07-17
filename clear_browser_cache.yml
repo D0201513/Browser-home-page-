@@ -2,6 +2,7 @@
 - name: Clear Chrome and Firefox cache for all users
   hosts: windows
   gather_facts: false
+
   tasks:
 
     - name: Get all user folders
@@ -16,7 +17,7 @@
           {{
             user_dirs.files
             | map(attribute='path')
-            | select('match', '^C:\\\\Users\\\\(?!Public|Default|All Users|Default User|defaultuser0|WDAGUtilityAccount).*')
+            | select('match', '^C:\\\\Users\\\\(?!Public$|Default$|All Users$|Default User$|defaultuser0$|WDAGUtilityAccount$).*')
             | list
           }}
 
@@ -30,26 +31,27 @@
         state: absent
       loop: "{{ valid_users }}"
 
-    - name: Find Firefox cache2 folders
+    - name: Find all Firefox cache2 folders under each user
       win_find:
         paths: "{{ item }}\\AppData\\Local\\Mozilla\\Firefox\\Profiles"
-        patterns: "cache2"
+        patterns: cache2
+        recurse: true
         file_type: directory
-      register: firefox_cache_folders
       loop: "{{ valid_users }}"
       loop_control:
         label: "{{ item }}"
+      register: firefox_cache_folders
 
-    - name: Delete 'entries' folder inside Firefox cache2
+    - name: Delete entire Firefox 'cache2' folders
       win_file:
-        path: "{{ item.path }}\\entries"
+        path: "{{ item.path }}"
         state: absent
       loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
       when: item.path is defined
 
-    - name: Recreate empty 'entries' folder (optional)
+    - name: (Optional) Recreate empty 'cache2' folder after cleanup
       win_file:
-        path: "{{ item.path }}\\entries"
+        path: "{{ item.path }}"
         state: directory
       loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
       when: item.path is defined
