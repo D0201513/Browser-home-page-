@@ -1,44 +1,43 @@
-- name: Clear Chrome and Firefox cache on Windows
-  hosts: windows
-  gather_facts: true
+---
+- name: Clear Chrome and Firefox cache for all users
+  hosts: windows_clients
+  gather_facts: false
+
   tasks:
 
-    #########################################
-    # 🔹 Clear Chrome Cache
-    #########################################
-    - name: Remove Chrome cache folder
-      ansible.windows.win_file:
-        path: "C:\\Users\\{{ ansible_user }}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache"
-        state: absent
-
-    - name: Recreate Chrome cache folder
-      ansible.windows.win_file:
-        path: "C:\\Users\\{{ ansible_user }}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache"
-        state: directory
-
-    #########################################
-    # 🔹 Find Firefox Profile in Local AppData
-    #########################################
-    - name: Find Firefox profiles (default-release) in LOCALAPPDATA
+    - name: Get all user folders
       win_find:
-        paths: "C:\\Users\\{{ ansible_user }}\\AppData\\Local\\Mozilla\\Firefox\\Profiles"
-        patterns: "*.default-release"
+        paths: C:\Users
         file_type: directory
-      register: firefox_profiles
+      register: user_dirs
 
-    #########################################
-    # 🔹 Clear Firefox cache2 folders
-    #########################################
-    - name: Remove Firefox cache2 folder if exists
-      ansible.windows.win_file:
-        path: "{{ item.path }}\\cache2"
+    - name: Filter valid user profiles (skip system folders)
+      set_fact:
+        valid_users: >
+          {{ user_dirs.files
+             | rejectattr('path', 'search', 'Default')
+             | rejectattr('path', 'search', 'Public')
+             | rejectattr('path', 'search', 'All Users')
+             | map(attribute='path') | list }}
+
+    - name: Clear Chrome cache for all users
+      win_file:
+        path: "{{ item }}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache"
         state: absent
-      loop: "{{ firefox_profiles.files }}"
-      when: firefox_profiles.matched > 0
+      loop: "{{ valid_users }}"
 
-    - name: Recreate Firefox cache2 folder
-      ansible.windows.win_file:
-        path: "{{ item.path }}\\cache2"
-        state: directory
-      loop: "{{ firefox_profiles.files }}"
-      when: firefox_profiles.matched > 0
+    - name: Find Firefox cache folders under Profiles
+      win_find:
+        paths: "{{ item }}\\AppData\\Local\\Mozilla\\Firefox\\Profiles"
+        patterns: 'cache2'
+        file_type: directory
+      loop: "{{ valid_users }}"
+      loop_control:
+        label: "{{ item }}"
+      register: ff_caches
+
+    - name: Remove all Firefox caches found
+      win_file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ ff_caches.results | map(attribute='files') | sum(start=[]) }}"
