@@ -1,6 +1,6 @@
 ---
 - name: Clear Firefox cache2 for all non-system users on Windows
-  hosts: windows_clients
+  hosts: windows
   gather_facts: false
   vars:
     firefox_cache_pattern: "AppData\\Local\\Mozilla\\Firefox\\Profiles\\*\\cache2"
