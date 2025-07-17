@@ -8,10 +8,11 @@
     firefox_install_dir: "C:\\Program Files\\Mozilla Firefox"
     temp_dir: "C:\\temp"
     check_script_path: "C:\\ProgramData\\CheckFirefox.ps1"
+    installer_path: "{{ temp_dir }}\\Firefox_Setup_117.0.exe"
 
   tasks:
-    - name: Create temp and policy folders
-      win_file:
+    - name: Create temp and distribution folders
+      ansible.windows.win_file:
         path: "{{ item }}"
         state: directory
       loop:
@@ -19,19 +20,19 @@
         - "{{ firefox_install_dir }}\\distribution"
 
     - name: Download Firefox 117 installer
-      win_get_url:
+      ansible.windows.win_get_url:
         url: "{{ firefox_download_url }}"
-        dest: "{{ temp_dir }}\\Firefox_Setup_117.0.exe"
+        dest: "{{ installer_path }}"
 
     - name: Install Firefox 117 silently
-      win_package:
-        path: "{{ temp_dir }}\\Firefox_Setup_117.0.exe"
+      ansible.windows.win_package:
+        path: "{{ installer_path }}"
         arguments: "/S /InstallDirectoryPath=\"{{ firefox_install_dir }}\""
         state: present
         wait_for_children: yes
 
-    - name: Create Firefox policies.json to lock updates
-      win_copy:
+    - name: Lock Firefox updates via policies.json
+      ansible.windows.win_copy:
         dest: "{{ firefox_install_dir }}\\distribution\\policies.json"
         content: |
           {
@@ -40,26 +41,26 @@
             }
           }
 
-    - name: Create registry key to disable updates
-      win_regedit:
+    - name: Disable Firefox updates via registry
+      ansible.windows.win_regedit:
         path: HKLM:\SOFTWARE\Policies\Mozilla\Firefox
         name: DisableAppUpdate
         data: 1
         type: dword
 
-    - name: Add PowerShell check script to auto-revert Firefox version
-      win_copy:
+    - name: Create PowerShell script to auto-revert Firefox if version changes
+      ansible.windows.win_copy:
         dest: "{{ check_script_path }}"
         content: |
           $installed = (Get-ItemProperty "C:\\Program Files\\Mozilla Firefox\\firefox.exe").VersionInfo.ProductVersion
-          if ($installed -notlike "117.0*") {
+          if ($installed -notlike "{{ firefox_version }}*") {
             Start-Process "C:\\Program Files\\Mozilla Firefox\\uninstall\\helper.exe" -ArgumentList "/S" -Wait
             Start-Sleep -Seconds 5
-            Start-Process "{{ temp_dir }}\\Firefox_Setup_117.0.exe" -ArgumentList "/S /InstallDirectoryPath='{{ firefox_install_dir }}'" -Wait
+            Start-Process "{{ installer_path }}" -ArgumentList "/S /InstallDirectoryPath='{{ firefox_install_dir }}'" -Wait
           }
 
-    - name: Schedule task to check Firefox version at every boot
-      win_scheduled_task:
+    - name: Schedule task to auto-check Firefox version at boot
+      ansible.windows.win_scheduled_task:
         name: "CheckFirefoxVersion"
         description: "Reverts Firefox to 117 if tampered"
         actions:
@@ -73,6 +74,6 @@
         enabled: yes
 
     - name: Remove Firefox installer to clean up
-      win_file:
-        path: "{{ temp_dir }}\\Firefox_Setup_117.0.exe"
+      ansible.windows.win_file:
+        path: "{{ installer_path }}"
         state: absent
