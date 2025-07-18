@@ -53,7 +53,7 @@
         data: ".*@invalid.local"
         type: string
 
-    # 🟠 Firefox Settings
+    # 🦊 Firefox Settings
     - name: Create Firefox policy directory
       ansible.windows.win_file:
         path: "C:\\Program Files\\Mozilla Firefox\\distribution"
@@ -70,7 +70,6 @@
                 "Locked": true
               },
               "DisablePasswordManager": true,
-              "PasswordManagerEnabled": false,
               "DisableTelemetry": true,
               "DisableSetDesktopBackground": true,
               "BlockAboutConfig": true
