@@ -1,4 +1,4 @@
-- name: Set and lock homepage for Chrome and Firefox
+- name: Set and lock homepage and disable password saving for Chrome and Firefox
   hosts: windows
   gather_facts: true
 
@@ -25,13 +25,27 @@
         data: 1
         type: dword
 
+    - name: Disable Chrome Password Manager
+      ansible.windows.win_regedit:
+        path: HKLM:\Software\Policies\Google\Chrome
+        name: PasswordManagerEnabled
+        data: 0
+        type: dword
+
+    - name: Disable Chrome Credential Service
+      ansible.windows.win_regedit:
+        path: HKLM:\Software\Policies\Google\Chrome
+        name: CredentialsEnableService
+        data: 0
+        type: dword
+
     # 🟠 Firefox Settings
     - name: Create Firefox policy directory
       ansible.windows.win_file:
         path: "C:\\Program Files\\Mozilla Firefox\\distribution"
         state: directory
 
-    - name: Set Firefox homepage to about:newtab and lock it
+    - name: Set Firefox homepage and disable password saving
       ansible.windows.win_copy:
         dest: "C:\\Program Files\\Mozilla Firefox\\distribution\\policies.json"
         content: |
@@ -41,6 +55,9 @@
                 "URL": "about:newtab",
                 "Locked": true
               },
+              "DisablePasswordManager": true,
+              "PasswordManagerEnabled": false,
+              "DisableTelemetry": true,
               "DisableSetDesktopBackground": true,
               "BlockAboutConfig": true
             }
