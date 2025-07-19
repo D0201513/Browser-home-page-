@@ -69,7 +69,7 @@
                 "URL": "about:newtab",
                 "Locked": true
               },
-              "DisablePasswordManager": false,
+              "PasswordManagerEnabled": false,
               "DisableTelemetry": true,
               "DisableSetDesktopBackground": true,
               "BlockAboutConfig": true
