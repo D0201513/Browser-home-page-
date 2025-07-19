@@ -1,0 +1,27 @@
+- name: Set Firefox policies on Kali Linux
+  hosts: linux
+  become: yes
+  tasks:
+    - name: Ensure Firefox distribution directory exists
+      ansible.builtin.file:
+        path: /usr/lib/firefox/distribution
+        state: directory
+        mode: '0755'
+
+    - name: Set Firefox policies (homepage, disable password saving)
+      ansible.builtin.copy:
+        dest: /usr/lib/firefox/distribution/policies.json
+        content: |
+          {
+            "policies": {
+              "Homepage": {
+                "URL": "about:newtab",
+                "Locked": true
+              },
+              "DisablePasswordManager": true,
+              "DisableTelemetry": true,
+              "DisableSetDesktopBackground": true,
+              "BlockAboutConfig": true
+            }
+          }
+        mode: '0644'
