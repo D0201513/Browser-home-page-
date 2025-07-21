@@ -1,0 +1,19 @@
+- name: Append Firefox policies on Kali Linux
+  hosts: kali
+  become: true
+  tasks:
+    - name: Ensure policy file exists
+      ansible.builtin.file:
+        path: /usr/lib/firefox/distribution/policies.json
+        state: touch
+        mode: '0644'
+
+    - name: Append Firefox policies without overwriting existing ones
+      community.general.json_modify:
+        path: /usr/lib/firefox-esr/distribution/policies.json
+        pointer: /policies
+        update:
+          DisableSetDesktopBackground: true
+          BlockAboutConfig: true
+          PasswordManagerEnabled: false
+          SyncDisabled: true
