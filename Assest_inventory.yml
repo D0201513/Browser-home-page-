@@ -1,0 +1,111 @@
+---
+- name: Collect complete asset inventory
+  hosts: all
+  gather_facts: yes
+  tasks:
+
+    - name: Collect Windows installed software
+      win_package_facts:
+      when: ansible_os_family == 'Windows'
+
+    - name: Collect Linux installed software
+      package_facts:
+        manager: auto
+      when: ansible_os_family != 'Windows'
+
+    - name: Collect Windows hotfixes
+      win_hotfix:
+      register: hotfix_info
+      when: ansible_os_family == 'Windows'
+
+    - name: Collect logged-in user (Windows)
+      win_whoami:
+      register: current_user
+      when: ansible_os_family == 'Windows'
+
+    - name: Collect services (Windows)
+      win_service_facts:
+      when: ansible_os_family == 'Windows'
+
+    - name: Collect scheduled tasks (Windows)
+      win_scheduled_task_stat:
+        name: "*"
+      register: sched_tasks
+      ignore_errors: true
+      when: ansible_os_family == 'Windows'
+
+    - name: Collect domain info
+      win_domain_membership:
+      register: domain_info
+      when: ansible_os_family == 'Windows'
+
+    - name: Collect BitLocker status (Windows)
+      win_shell: manage-bde -status
+      register: bitlocker_status
+      ignore_errors: true
+      when: ansible_os_family == 'Windows'
+
+    - name: Collect firewall rules (Windows)
+      win_firewall_rule:
+        name: "*"
+      register: firewall_rules
+      ignore_errors: true
+      when: ansible_os_family == 'Windows'
+
+    - name: Save full inventory (Windows)
+      win_copy:
+        dest: C:\AssetInventory\full_inventory_{{ ansible_hostname }}.txt
+        content: |
+          Hostname: {{ ansible_hostname }}
+          Manufacturer: {{ ansible_system_vendor | default('N/A') }}
+          Model: {{ ansible_product_name | default('N/A') }}
+          Serial: {{ ansible_product_serial | default('N/A') }}
+          BIOS Version: {{ ansible_bios_version | default('N/A') }}
+          BIOS Vendor: {{ ansible_bios_vendor | default('N/A') }}
+          OS: {{ ansible_os_name }} {{ ansible_os_version }}
+          Product Key: N/A
+          CPU: {{ ansible_processor[1] }}
+          Cores: {{ ansible_processor_cores }}
+          RAM: {{ ansible_memtotal_mb }} MB
+          Disk Info: {{ ansible_devices | to_nice_json }}
+          GPU: {{ ansible_graphics | default('N/A') }}
+          IP: {{ ansible_default_ipv4.address }}
+          MAC: {{ ansible_default_ipv4.macaddress }}
+          Domain: {{ domain_info.domain_name | default('N/A') }}
+          Logged-in User: {{ current_user.user_name | default('N/A') }}
+          Uptime: {{ ansible_uptime_seconds | default('N/A') }} seconds
+          BitLocker Status: {{ bitlocker_status.stdout | default('N/A') }}
+          Services: {{ ansible_services | default({}) | to_nice_json }}
+          Scheduled Tasks: {{ sched_tasks | to_nice_json }}
+          Firewall Rules: {{ firewall_rules | to_nice_json }}
+          Installed Software:
+          {% for pkg in ansible_facts.packages %}
+          - {{ pkg.name }} ({{ pkg.version }})
+          {% endfor %}
+          Hotfixes:
+          {% for h in hotfix_info.hotfixes %}
+          - {{ h.HotFixID }} installed on {{ h.InstalledOn }}
+          {% endfor %}
+      when: ansible_os_family == 'Windows'
+
+    - name: Save full inventory (Linux)
+      copy:
+        dest: /tmp/full_inventory_{{ ansible_hostname }}.txt
+        content: |
+          Hostname: {{ ansible_hostname }}
+          Manufacturer: {{ ansible_system_vendor | default('N/A') }}
+          Model: {{ ansible_product_name | default('N/A') }}
+          Serial: {{ ansible_product_serial | default('N/A') }}
+          BIOS Version: {{ ansible_bios_version | default('N/A') }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel: {{ ansible_kernel }}
+          CPU: {{ ansible_processor[1] }}
+          Cores: {{ ansible_processor_cores }}
+          RAM: {{ ansible_memtotal_mb }} MB
+          Disk Info: {{ ansible_devices | to_nice_json }}
+          IP: {{ ansible_default_ipv4.address }}
+          MAC: {{ ansible_default_ipv4.macaddress }}
+          Installed Software:
+          {% for pkg in ansible_facts.packages %}
+          - {{ pkg }}
+          {% endfor %}
