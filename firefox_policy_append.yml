@@ -1,19 +1,20 @@
-- name: Append Firefox policies on Kali Linux
-  hosts: kali
+- name: Append Firefox policies on Cinnamon Linux safely
+  hosts: cinnamon
   become: true
   tasks:
-    - name: Ensure policy file exists
+
+    - name: Ensure policies.json file exists
       ansible.builtin.file:
         path: /usr/lib/firefox/distribution/policies.json
         state: touch
         mode: '0644'
 
-    - name: Append Firefox policies without overwriting existing ones
+    - name: Append new Firefox policies (without removing existing ones)
       community.general.json_modify:
-        path: /usr/lib/firefox-esr/distribution/policies.json
+        path: /usr/lib/firefox/distribution/policies.json
         pointer: /policies
         update:
-          DisableSetDesktopBackground: true
           BlockAboutConfig: true
+          DisableSetDesktopBackground: true
           PasswordManagerEnabled: false
           SyncDisabled: true
