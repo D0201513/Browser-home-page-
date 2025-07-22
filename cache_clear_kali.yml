@@ -48,7 +48,7 @@
       loop: "{{ firefox_cache_folders.results | map(attribute='files') | sum(start=[]) }}"
       when: item.path is defined
 
-    - name: (Optional) Recreate empty 'cache2' folders
+    - name: Recreate empty 'cache2' folders
       file:
         path: "{{ item.path }}"
         state: directory
