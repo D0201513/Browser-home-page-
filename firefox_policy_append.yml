@@ -1,16 +1,16 @@
+---
 - name: Append Firefox policies on Cinnamon Linux safely (no external collections)
-  hosts: cinnamon_ubuntu
+  hosts: cinnamon_ubuntu   # 🟢 This must exactly match your inventory
   become: true
-  gather_facts: true
   tasks:
 
-    - name: Create Firefox distribution directory if not exists
+    - name: Ensure policies.json file exists
       ansible.builtin.file:
-        path: /usr/lib/firefox/distribution
-        state: directory
-        mode: '0755'
+        path: /usr/lib/firefox/distribution/policies.json
+        state: touch
+        mode: '0644'
 
-    - name: Append or create Firefox policies.json (overwrite with merged values)
+    - name: Append Firefox policies with win_shell fallback
       ansible.builtin.copy:
         dest: /usr/lib/firefox/distribution/policies.json
         content: |
