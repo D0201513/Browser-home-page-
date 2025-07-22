@@ -1,5 +1,5 @@
 - name: Append Firefox policies on Cinnamon Linux safely (no external collections)
-  hosts: cinnamon
+  hosts: all
   become: true
   vars:
     policies_file: /usr/lib/firefox/distribution/policies.json
