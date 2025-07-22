@@ -1,0 +1,16 @@
+- name: Add PasswordManagerEnabled to Firefox policies.json on Kali
+  hosts: kali
+  become: true
+  tasks:
+    - name: Ensure Firefox policy directory exists
+      ansible.builtin.file:
+        path: /usr/lib/firefox/distribution
+        state: directory
+
+    - name: Insert PasswordManagerEnabled into existing policies.json
+      ansible.builtin.blockinfile:
+        path: /usr/lib/firefox/distribution/policies.json
+        marker: ""
+        insertafter: '"policies": {'
+        block: |
+          "PasswordManagerEnabled": false,
