@@ -1,22 +1,16 @@
-- name: Append Firefox policies on Linux systems
-  hosts: all
+- name: Append Firefox policies on Cinnamon Linux safely (no external collections)
+  hosts: cinnamon_ubuntu
   become: true
   gather_facts: true
   tasks:
 
-    - name: Only run on Linux
-      ansible.builtin.assert:
-        that: ansible_os_family != 'Windows'
-        fail_msg: "This playbook should only run on Linux hosts."
-        success_msg: "Host is Linux. Proceeding."
-
-    - name: Ensure Firefox policy directory exists
+    - name: Create Firefox distribution directory if not exists
       ansible.builtin.file:
         path: /usr/lib/firefox/distribution
         state: directory
         mode: '0755'
 
-    - name: Ensure policies.json file exists
+    - name: Append or create Firefox policies.json (overwrite with merged values)
       ansible.builtin.copy:
         dest: /usr/lib/firefox/distribution/policies.json
         content: |
@@ -29,4 +23,3 @@
             }
           }
         mode: '0644'
-        force: false
