@@ -4,9 +4,19 @@
   gather_facts: yes
   tasks:
 
-    - name: Collect Windows installed software
-      win_package_facts:
+    - name: Collect Windows installed software (via registry)
+      win_shell: |
+        Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
+        Select-Object DisplayName, DisplayVersion |
+        ConvertTo-Json
+      register: installed_software_raw
       when: ansible_os_family == 'Windows'
+
+    - name: Parse installed software JSON
+      set_fact:
+        installed_software: "{{ installed_software_raw.stdout | from_json }}"
+      when: ansible_os_family == 'Windows'
+      ignore_errors: true
 
     - name: Collect Linux installed software
       package_facts:
@@ -28,8 +38,7 @@
       when: ansible_os_family == 'Windows'
 
     - name: Collect scheduled tasks (Windows)
-      win_scheduled_task_stat:
-        name: "*"
+      win_shell: Get-ScheduledTask | Select-Object TaskName, TaskPath | ConvertTo-Json
       register: sched_tasks
       ignore_errors: true
       when: ansible_os_family == 'Windows'
@@ -46,8 +55,7 @@
       when: ansible_os_family == 'Windows'
 
     - name: Collect firewall rules (Windows)
-      win_firewall_rule:
-        name: "*"
+      win_shell: Get-NetFirewallRule | Select-Object DisplayName, Enabled, Direction, Action | ConvertTo-Json
       register: firewall_rules
       ignore_errors: true
       when: ansible_os_family == 'Windows'
@@ -63,29 +71,35 @@
           BIOS Version: {{ ansible_bios_version | default('N/A') }}
           BIOS Vendor: {{ ansible_bios_vendor | default('N/A') }}
           OS: {{ ansible_os_name }} {{ ansible_os_version }}
-          Product Key: N/A
           CPU: {{ ansible_processor[1] }}
           Cores: {{ ansible_processor_cores }}
           RAM: {{ ansible_memtotal_mb }} MB
           Disk Info: {{ ansible_devices | to_nice_json }}
-          GPU: {{ ansible_graphics | default('N/A') }}
           IP: {{ ansible_default_ipv4.address }}
           MAC: {{ ansible_default_ipv4.macaddress }}
           Domain: {{ domain_info.domain_name | default('N/A') }}
           Logged-in User: {{ current_user.user_name | default('N/A') }}
           Uptime: {{ ansible_uptime_seconds | default('N/A') }} seconds
           BitLocker Status: {{ bitlocker_status.stdout | default('N/A') }}
-          Services: {{ ansible_services | default({}) | to_nice_json }}
-          Scheduled Tasks: {{ sched_tasks | to_nice_json }}
-          Firewall Rules: {{ firewall_rules | to_nice_json }}
-          Installed Software:
-          {% for pkg in ansible_facts.packages %}
-          - {{ pkg.name }} ({{ pkg.version }})
+
+          === Installed Software ===
+          {% for item in installed_software %}
+          - {{ item.DisplayName }} ({{ item.DisplayVersion }})
           {% endfor %}
-          Hotfixes:
+
+          === Hotfixes ===
           {% for h in hotfix_info.hotfixes %}
           - {{ h.HotFixID }} installed on {{ h.InstalledOn }}
           {% endfor %}
+
+          === Services ===
+          {{ ansible_services | to_nice_json }}
+
+          === Scheduled Tasks ===
+          {{ sched_tasks.stdout | default('N/A') }}
+
+          === Firewall Rules ===
+          {{ firewall_rules.stdout | default('N/A') }}
       when: ansible_os_family == 'Windows'
 
     - name: Save full inventory (Linux)
@@ -105,7 +119,9 @@
           Disk Info: {{ ansible_devices | to_nice_json }}
           IP: {{ ansible_default_ipv4.address }}
           MAC: {{ ansible_default_ipv4.macaddress }}
-          Installed Software:
-          {% for pkg in ansible_facts.packages %}
-          - {{ pkg }}
+
+          === Installed Software ===
+          {% for name, info in ansible_facts.packages.items() %}
+          - {{ name }}: {{ info[0].version }}
           {% endfor %}
+      when: ansible_os_family != 'Windows'
