@@ -1,20 +1,29 @@
-- name: Append Firefox policies on Cinnamon Linux safely
+- name: Append Firefox policies on Cinnamon Linux safely (no external collections)
   hosts: cinnamon
   become: true
+  vars:
+    policies_file: /usr/lib/firefox/distribution/policies.json
   tasks:
 
-    - name: Ensure policies.json file exists
+    - name: Ensure Firefox distribution directory exists
       ansible.builtin.file:
-        path: /usr/lib/firefox/distribution/policies.json
-        state: touch
-        mode: '0644'
+        path: /usr/lib/firefox/distribution
+        state: directory
+        mode: '0755'
 
-    - name: Append new Firefox policies (without removing existing ones)
-      community.general.json_modify:
-        path: /usr/lib/firefox/distribution/policies.json
-        pointer: /policies
-        update:
-          BlockAboutConfig: true
-          DisableSetDesktopBackground: true
-          PasswordManagerEnabled: false
-          SyncDisabled: true
+    - name: Create a base policies.json if not present
+      ansible.builtin.shell: |
+        if [ ! -f "{{ policies_file }}" ]; then
+          echo '{"policies":{}}' > "{{ policies_file }}"
+        fi
+
+    - name: Append new Firefox policies using jq
+      ansible.builtin.shell: |
+        jq '.policies += {
+          "BlockAboutConfig": true,
+          "DisableSetDesktopBackground": true,
+          "PasswordManagerEnabled": false,
+          "SyncDisabled": true
+        }' "{{ policies_file }}" > /tmp/policies.json && mv /tmp/policies.json "{{ policies_file }}"
+      args:
+        executable: /bin/bash
