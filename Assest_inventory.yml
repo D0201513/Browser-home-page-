@@ -4,6 +4,7 @@
   gather_facts: yes
   tasks:
 
+    # === WINDOWS TASKS ===
     - name: Collect Windows installed software (via registry)
       win_shell: |
         Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
@@ -17,11 +18,6 @@
         installed_software: "{{ installed_software_raw.stdout | from_json }}"
       when: ansible_os_family == 'Windows'
       ignore_errors: true
-
-    - name: Collect Linux installed software
-      package_facts:
-        manager: auto
-      when: ansible_os_family != 'Windows'
 
     - name: Collect Windows hotfixes
       win_hotfix:
@@ -84,7 +80,7 @@
 
           === Installed Software ===
           {% for item in installed_software %}
-          - {{ item.DisplayName }} ({{ item.DisplayVersion }})
+          - {{ item.DisplayName | default('') }} ({{ item.DisplayVersion | default('') }})
           {% endfor %}
 
           === Hotfixes ===
@@ -101,6 +97,12 @@
           === Firewall Rules ===
           {{ firewall_rules.stdout | default('N/A') }}
       when: ansible_os_family == 'Windows'
+
+    # === LINUX TASKS ===
+    - name: Collect Linux installed software
+      package_facts:
+        manager: auto
+      when: ansible_os_family != 'Windows'
 
     - name: Save full inventory (Linux)
       copy:
