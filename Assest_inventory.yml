@@ -2,128 +2,53 @@
 - name: Collect complete asset inventory
   hosts: all
   gather_facts: yes
+  become: true
+  vars:
+    inventory_file: "/tmp/full_inventory_{{ ansible_hostname }}.txt"
+
   tasks:
 
-    # === WINDOWS TASKS ===
-    - name: Collect Windows installed software (via registry)
-      win_shell: |
-        Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
-        Select-Object DisplayName, DisplayVersion |
-        ConvertTo-Json
-      register: installed_software_raw
-      when: ansible_os_family == 'Windows'
-
-    - name: Parse installed software JSON
-      set_fact:
-        installed_software: "{{ installed_software_raw.stdout | from_json }}"
-      when: ansible_os_family == 'Windows'
-      ignore_errors: true
-
-    - name: Collect Windows hotfixes
-      win_hotfix:
-      register: hotfix_info
-      when: ansible_os_family == 'Windows'
-
-    - name: Collect logged-in user (Windows)
-      win_whoami:
-      register: current_user
-      when: ansible_os_family == 'Windows'
-
-    - name: Collect services (Windows)
-      win_service_facts:
-      when: ansible_os_family == 'Windows'
-
-    - name: Collect scheduled tasks (Windows)
-      win_shell: Get-ScheduledTask | Select-Object TaskName, TaskPath | ConvertTo-Json
-      register: sched_tasks
-      ignore_errors: true
-      when: ansible_os_family == 'Windows'
-
-    - name: Collect domain info
-      win_domain_membership:
-      register: domain_info
-      when: ansible_os_family == 'Windows'
-
-    - name: Collect BitLocker status (Windows)
-      win_shell: manage-bde -status
-      register: bitlocker_status
-      ignore_errors: true
-      when: ansible_os_family == 'Windows'
-
-    - name: Collect firewall rules (Windows)
-      win_shell: Get-NetFirewallRule | Select-Object DisplayName, Enabled, Direction, Action | ConvertTo-Json
-      register: firewall_rules
-      ignore_errors: true
-      when: ansible_os_family == 'Windows'
-
-    - name: Save full inventory (Windows)
-      win_copy:
-        dest: C:\AssetInventory\full_inventory_{{ ansible_hostname }}.txt
-        content: |
-          Hostname: {{ ansible_hostname }}
-          Manufacturer: {{ ansible_system_vendor | default('N/A') }}
-          Model: {{ ansible_product_name | default('N/A') }}
-          Serial: {{ ansible_product_serial | default('N/A') }}
-          BIOS Version: {{ ansible_bios_version | default('N/A') }}
-          BIOS Vendor: {{ ansible_bios_vendor | default('N/A') }}
-          OS: {{ ansible_os_name }} {{ ansible_os_version }}
-          CPU: {{ ansible_processor[1] }}
-          Cores: {{ ansible_processor_cores }}
-          RAM: {{ ansible_memtotal_mb }} MB
-          Disk Info: {{ ansible_devices | to_nice_json }}
-          IP: {{ ansible_default_ipv4.address }}
-          MAC: {{ ansible_default_ipv4.macaddress }}
-          Domain: {{ domain_info.domain_name | default('N/A') }}
-          Logged-in User: {{ current_user.user_name | default('N/A') }}
-          Uptime: {{ ansible_uptime_seconds | default('N/A') }} seconds
-          BitLocker Status: {{ bitlocker_status.stdout | default('N/A') }}
-
-          === Installed Software ===
-          {% for item in installed_software %}
-          - {{ item.DisplayName | default('') }} ({{ item.DisplayVersion | default('') }})
-          {% endfor %}
-
-          === Hotfixes ===
-          {% for h in hotfix_info.hotfixes %}
-          - {{ h.HotFixID }} installed on {{ h.InstalledOn }}
-          {% endfor %}
-
-          === Services ===
-          {{ ansible_services | to_nice_json }}
-
-          === Scheduled Tasks ===
-          {{ sched_tasks.stdout | default('N/A') }}
-
-          === Firewall Rules ===
-          {{ firewall_rules.stdout | default('N/A') }}
-      when: ansible_os_family == 'Windows'
-
-    # === LINUX TASKS ===
-    - name: Collect Linux installed software
-      package_facts:
-        manager: auto
+    - name: Ensure Python is installed (Linux only)
+      raw: test -e /usr/bin/python3 || (apt update && apt install -y python3)
       when: ansible_os_family != 'Windows'
 
-    - name: Save full inventory (Linux)
-      copy:
-        dest: /tmp/full_inventory_{{ ansible_hostname }}.txt
-        content: |
-          Hostname: {{ ansible_hostname }}
-          Manufacturer: {{ ansible_system_vendor | default('N/A') }}
-          Model: {{ ansible_product_name | default('N/A') }}
-          Serial: {{ ansible_product_serial | default('N/A') }}
-          BIOS Version: {{ ansible_bios_version | default('N/A') }}
-          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          Kernel: {{ ansible_kernel }}
-          CPU: {{ ansible_processor[1] }}
-          Cores: {{ ansible_processor_cores }}
-          RAM: {{ ansible_memtotal_mb }} MB
-          Disk Info: {{ ansible_devices | to_nice_json }}
-          IP: {{ ansible_default_ipv4.address }}
-          MAC: {{ ansible_default_ipv4.macaddress }}
+    - name: Collect Windows hotfixes (only if ansible.windows is available)
+      block:
+        - name: Collect Windows hotfixes
+          win_hotfix:
+          register: hotfix_info
 
-          === Installed Software ===
-          {% for name, info in ansible_facts.packages.items() %}
-          - {{ name }}: {{ info[0].version }}
-          {% endfor %}
+        - name: Save hotfixes to inventory file
+          copy:
+            dest: "{{ inventory_file }}"
+            content: |
+              Hostname: {{ ansible_hostname }}
+              OS: {{ ansible_os_family }}
+              Hotfixes:
+              {% for patch in hotfix_info.hotfixes %}
+              - {{ patch.HotFixID }}
+              {% endfor %}
+          when: hotfix_info is defined
+      when: ansible_os_family == 'Windows'
+      ignore_errors: yes  # To prevent failure if module is missing
+
+    - name: Collect Linux system info
+      block:
+        - name: Write system info
+          copy:
+            dest: "{{ inventory_file }}"
+            content: |
+              Hostname: {{ ansible_hostname }}
+              OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+              CPU: {{ ansible_processor[1] | default(ansible_processor[0] | default('N/A')) }}
+              Memory: {{ ansible_memtotal_mb | default('N/A') }} MB
+              Disk Info: {{ ansible_devices | default({}) | to_nice_json }}
+              Installed Packages:
+              {% for name, info in ansible_facts.packages | default({}) %}
+              - {{ name }}: {{ info[0].version }}
+              {% endfor %}
       when: ansible_os_family != 'Windows'
+
+    - name: Print location of inventory file
+      debug:
+        msg: "Inventory saved to {{ inventory_file }}"
