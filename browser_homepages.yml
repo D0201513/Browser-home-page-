@@ -72,6 +72,6 @@
               "PasswordManagerEnabled": false,
               "DisableTelemetry": true,
               "DisableSetDesktopBackground": true,
-              "BlockAboutConfig": false
+              "BlockAboutConfig": true
             }
           }
