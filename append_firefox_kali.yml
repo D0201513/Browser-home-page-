@@ -1,5 +1,5 @@
 - name: Add PasswordManagerEnabled to Firefox policies.json on Kali
-  hosts: kali
+  hosts: kali_linux
   become: true
   tasks:
     - name: Ensure Firefox policy directory exists
