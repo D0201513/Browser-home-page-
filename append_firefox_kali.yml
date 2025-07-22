@@ -4,12 +4,12 @@
   tasks:
     - name: Ensure Firefox policy directory exists
       ansible.builtin.file:
-        path: /usr/lib/firefox/distribution
+        path: /usr/lib/firefox-esr/distribution
         state: directory
 
     - name: Insert PasswordManagerEnabled into existing policies.json
       ansible.builtin.blockinfile:
-        path: /usr/lib/firefox/distribution/policies.json
+        path: /usr/lib/firefox-esr/distribution/policies.json
         marker: ""
         insertafter: '"policies": {'
         block: |
