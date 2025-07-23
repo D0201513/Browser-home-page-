@@ -11,13 +11,11 @@
     installer_path: "{{ temp_dir }}\\Firefox_Setup_117.0.exe"
 
   tasks:
-    - name: Create temp and distribution folders
+
+    - name: Create temp folder
       ansible.windows.win_file:
-        path: "{{ item }}"
+        path: "{{ temp_dir }}"
         state: directory
-      loop:
-        - "{{ temp_dir }}"
-        - "{{ firefox_install_dir }}\\distribution"
 
     - name: Download Firefox 117 installer
       ansible.windows.win_get_url:
@@ -30,6 +28,11 @@
         arguments: "/S"
         state: present
         wait_for_children: yes
+
+    - name: Ensure Firefox distribution folder exists
+      ansible.windows.win_file:
+        path: "{{ firefox_install_dir }}\\distribution"
+        state: directory
 
     - name: Lock Firefox updates via policies.json
       ansible.windows.win_copy:
@@ -62,13 +65,16 @@
               }
           }
 
-    - name: Create scheduled task via PowerShell
+    - name: Create scheduled task via PowerShell (to enforce version at boot)
       ansible.windows.win_shell: |
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File '{{ check_script_path }}'"
-        $trigger = New-ScheduledTaskTrigger -AtStartup
-        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
-        $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal
-        Register-ScheduledTask -TaskName "CheckFirefoxVersion" -InputObject $task -Force
+        $exists = Get-ScheduledTask -TaskName "CheckFirefoxVersion" -ErrorAction SilentlyContinue
+        if (-not $exists) {
+            $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File '{{ check_script_path }}'"
+            $trigger = New-ScheduledTaskTrigger -AtStartup
+            $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+            $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal
+            Register-ScheduledTask -TaskName "CheckFirefoxVersion" -InputObject $task -Force
+        }
 
     - name: Remove Firefox installer to clean up
       ansible.windows.win_file:
