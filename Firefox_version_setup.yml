@@ -62,19 +62,13 @@
               }
           }
 
-    - name: Schedule task to auto-check Firefox version at boot
-      community.windows.win_scheduled_task:
-        name: "CheckFirefoxVersion"
-        description: "Reverts Firefox to 117 if tampered"
-        actions:
-          - path: powershell.exe
-            arguments: "-ExecutionPolicy Bypass -File {{ check_script_path }}"
-        triggers:
-          - type: boot
-        username: "NT AUTHORITY\\SYSTEM"
-        run_level: highest
-        state: present
-        enabled: yes
+    - name: Create scheduled task via PowerShell
+      ansible.windows.win_shell: |
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File '{{ check_script_path }}'"
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+        $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal
+        Register-ScheduledTask -TaskName "CheckFirefoxVersion" -InputObject $task -Force
 
     - name: Remove Firefox installer to clean up
       ansible.windows.win_file:
