@@ -27,7 +27,7 @@
     - name: Install Firefox 117 silently
       ansible.windows.win_package:
         path: "{{ installer_path }}"
-        arguments: "/S /InstallDirectoryPath=\"{{ firefox_install_dir }}\""
+        arguments: "/S"
         state: present
         wait_for_children: yes
 
@@ -52,15 +52,18 @@
       ansible.windows.win_copy:
         dest: "{{ check_script_path }}"
         content: |
-          $installed = (Get-ItemProperty "C:\\Program Files\\Mozilla Firefox\\firefox.exe").VersionInfo.ProductVersion
-          if ($installed -notlike "{{ firefox_version }}*") {
-            Start-Process "C:\\Program Files\\Mozilla Firefox\\uninstall\\helper.exe" -ArgumentList "/S" -Wait
-            Start-Sleep -Seconds 5
-            Start-Process "{{ installer_path }}" -ArgumentList "/S /InstallDirectoryPath='{{ firefox_install_dir }}'" -Wait
+          $path = "C:\Program Files\Mozilla Firefox\firefox.exe"
+          if (Test-Path $path) {
+              $installed = (Get-Item $path).VersionInfo.ProductVersion
+              if ($installed -notlike "{{ firefox_version }}*") {
+                  Start-Process "C:\Program Files\Mozilla Firefox\uninstall\helper.exe" -ArgumentList "/S" -Wait
+                  Start-Sleep -Seconds 5
+                  Start-Process "{{ installer_path }}" -ArgumentList "/S" -Wait
+              }
           }
 
     - name: Schedule task to auto-check Firefox version at boot
-      ansible.windows.win_scheduled_task:
+      community.windows.win_scheduled_task:
         name: "CheckFirefoxVersion"
         description: "Reverts Firefox to 117 if tampered"
         actions:
@@ -68,7 +71,7 @@
             arguments: "-ExecutionPolicy Bypass -File {{ check_script_path }}"
         triggers:
           - type: boot
-        username: "SYSTEM"
+        username: "NT AUTHORITY\\SYSTEM"
         run_level: highest
         state: present
         enabled: yes
