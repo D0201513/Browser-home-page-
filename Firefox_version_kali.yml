@@ -52,9 +52,6 @@
         state: link
         force: true
 
-    - name: Make the Firefox binary symlink immutable
-      ansible.builtin.command: chattr +i /usr/bin/firefox
-
     - name: Create version check script to auto-revert
       ansible.builtin.copy:
         dest: "{{ check_script_path }}"
@@ -65,9 +62,7 @@
           correct_path="{{ install_dir }}/firefox/firefox"
           symlink_path="/usr/bin/firefox"
           if [[ ! -L "$symlink_path" || "$(readlink -f $symlink_path)" != "$correct_path" ]]; then
-            chattr -i $symlink_path
             ln -sf "$correct_path" "$symlink_path"
-            chattr +i $symlink_path
           fi
 
     - name: Schedule cron job to check Firefox version at reboot
