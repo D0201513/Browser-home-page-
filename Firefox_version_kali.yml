@@ -35,6 +35,13 @@
       args:
         creates: "/usr/lib/firefox-esr-disabled"
 
+    - name: Fix broken firefox-esr reference by pointing it to Firefox 117
+      ansible.builtin.file:
+        src: "{{ install_dir }}/firefox/firefox"
+        dest: "/usr/lib/firefox-esr/firefox-esr"
+        state: link
+        force: true
+
     - name: Prevent Firefox ESR from being upgraded
       ansible.builtin.command: apt-mark hold firefox-esr
 
