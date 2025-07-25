@@ -1,20 +1,19 @@
----
 - name: Collect Asset Inventory from All Systems
   hosts: all
   gather_facts: true
-  become: yes
   vars:
     output_dir: "/tmp/asset_inventory"
 
   pre_tasks:
-    - name: Ensure output directory exists
+    - name: Ensure output directory exists (Linux only)
+      when: ansible_os_family != "Windows"
       ansible.builtin.file:
         path: "{{ output_dir }}"
         state: directory
         mode: '0755'
 
   tasks:
-    - name: Gather Windows hotfixes (only for Windows)
+    - name: Gather Windows hotfixes (Windows only)
       when: ansible_os_family == "Windows"
       win_shell: |
         Get-HotFix | Select-Object HotFixID, InstalledOn | ConvertTo-Json
@@ -25,12 +24,12 @@
       set_fact:
         hotfix_data: "{{ windows_hotfixes.stdout | from_json }}"
 
-    - name: Set empty hotfix variable for Linux
+    - name: Set empty hotfix variable for non-Windows
       when: ansible_os_family != "Windows"
       set_fact:
         hotfix_data: []
 
-    - name: Collect asset inventory data
+    - name: Collect asset inventory
       set_fact:
         asset_data: {
           "hostname": "{{ ansible_hostname }}",
@@ -47,8 +46,15 @@
           "hotfixes": "{{ hotfix_data }}"
         }
 
-    - name: Save inventory to JSON file
+    - name: Save asset inventory to JSON (Linux)
+      when: ansible_os_family != "Windows"
       copy:
         dest: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
         content: "{{ asset_data | to_nice_json }}"
         mode: '0644'
+
+    - name: Save asset inventory to JSON (Windows)
+      when: ansible_os_family == "Windows"
+      win_copy:
+        dest: "C:\\Windows\\Temp\\asset_{{ inventory_hostname }}.json"
+        content: "{{ asset_data | to_nice_json }}"
