@@ -2,13 +2,14 @@
   hosts: all
   gather_facts: true
   vars:
-    output_dir: "/tmp/asset_inventory"
+    remote_output_dir: "/tmp/asset_inventory"
+    local_output_dir: "./collected_assets"
 
   pre_tasks:
-    - name: Ensure output directory exists (Linux only)
+    - name: Ensure output directory exists on remote (Linux only)
       when: ansible_os_family != "Windows"
       ansible.builtin.file:
-        path: "{{ output_dir }}"
+        path: "{{ remote_output_dir }}"
         state: directory
         mode: '0755'
 
@@ -62,15 +63,92 @@
           "hotfixes": "{{ hotfix_data }}"
         }
 
-    - name: Save asset inventory to JSON (Linux)
+    - name: Save asset inventory to JSON on Linux
       when: ansible_os_family != "Windows"
       copy:
-        dest: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
+        dest: "{{ remote_output_dir }}/asset_{{ inventory_hostname }}.json"
         content: "{{ asset_data | to_nice_json }}"
         mode: '0644'
 
-    - name: Save asset inventory to JSON (Windows)
+    - name: Save asset inventory to JSON on Windows
       when: ansible_os_family == "Windows"
       win_copy:
         dest: "C:\\Windows\\Temp\\asset_{{ inventory_hostname }}.json"
         content: "{{ asset_data | to_nice_json }}"
+
+    - name: Fetch asset JSON from Linux hosts to control node
+      when: ansible_os_family != "Windows"
+      fetch:
+        src: "{{ remote_output_dir }}/asset_{{ inventory_hostname }}.json"
+        dest: "{{ local_output_dir }}/"
+        flat: yes
+
+    - name: Fetch asset JSON from Windows hosts to control node
+      when: ansible_os_family == "Windows"
+      fetch:
+        src: "C:\\Windows\\Temp\\asset_{{ inventory_hostname }}.json"
+        dest: "{{ local_output_dir }}/"
+        flat: yes
+
+    - name: Save full inventory (Linux)
+      copy:
+        dest: "{{ remote_output_dir }}/full_inventory_{{ inventory_hostname }}.txt"
+        content: |
+          Hostname: {{ ansible_hostname }}
+          Manufacturer: {{ ansible_system_vendor | default('N/A') }}
+          Model: {{ ansible_product_name | default('N/A') }}
+          Serial: {{ ansible_product_serial | default('N/A') }}
+          BIOS Version: {{ ansible_bios_version | default('N/A') }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel: {{ ansible_kernel }}
+          CPU: {{ ansible_processor[1] | default('N/A') }}
+          Cores: {{ ansible_processor_cores | default('N/A') }}
+          RAM: {{ ansible_memtotal_mb }} MB
+          Disk Info: {{ ansible_devices | to_nice_json }}
+          IP: {{ ansible_default_ipv4.address }}
+          MAC: {{ ansible_default_ipv4.macaddress }}
+          Installed Software:
+          {% for pkg in ansible_facts.packages %}
+          - {{ pkg }}
+          {% endfor %}
+      when: ansible_os_family != 'Windows'
+
+    - name: Save full inventory (Windows)
+      win_copy:
+        dest: "C:\\Windows\\Temp\\full_inventory_{{ inventory_hostname }}.txt"
+        content: |
+          Hostname: {{ ansible_hostname }}
+          Manufacturer: {{ ansible_system_vendor | default('N/A') }}
+          Model: {{ ansible_product_name | default('N/A') }}
+          Serial: {{ ansible_product_serial | default('N/A') }}
+          BIOS Version: {{ ansible_bios_version | default('N/A') }}
+          BIOS Vendor: {{ ansible_bios_vendor | default('N/A') }}
+          OS: {{ ansible_os_name }} {{ ansible_os_version }}
+          CPU: {{ ansible_processor[1] | default('N/A') }}
+          Cores: {{ ansible_processor_cores | default('N/A') }}
+          RAM: {{ ansible_memtotal_mb }} MB
+          Disk Info: {{ ansible_devices | to_nice_json }}
+          IP: {{ ansible_default_ipv4.address }}
+          MAC: {{ ansible_default_ipv4.macaddress }}
+          Installed Software:
+          {% for pkg in ansible_facts.packages %}
+          - {{ pkg.name }} ({{ pkg.version }})
+          {% endfor %}
+          Hotfixes:
+          {% for h in hotfix_data %}
+          - {{ h.HotFixID }} installed on {{ h.InstalledOn }}
+          {% endfor %}
+
+    - name: Fetch full inventory .txt file from Linux
+      when: ansible_os_family != "Windows"
+      fetch:
+        src: "{{ remote_output_dir }}/full_inventory_{{ inventory_hostname }}.txt"
+        dest: "{{ local_output_dir }}/"
+        flat: yes
+
+    - name: Fetch full inventory .txt file from Windows
+      when: ansible_os_family == "Windows"
+      fetch:
+        src: "C:\\Windows\\Temp\\full_inventory_{{ inventory_hostname }}.txt"
+        dest: "{{ local_output_dir }}/"
+        flat: yes
