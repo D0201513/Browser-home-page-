@@ -1,54 +1,54 @@
 ---
-- name: Collect complete asset inventory
+- name: Collect Asset Inventory from All Systems
   hosts: all
-  gather_facts: yes
-  become: true
+  gather_facts: true
+  become: yes
   vars:
-    inventory_file: "/tmp/full_inventory_{{ ansible_hostname }}.txt"
+    output_dir: "/tmp/asset_inventory"
+
+  pre_tasks:
+    - name: Ensure output directory exists
+      ansible.builtin.file:
+        path: "{{ output_dir }}"
+        state: directory
+        mode: '0755'
 
   tasks:
+    - name: Gather Windows hotfixes (only for Windows)
+      when: ansible_os_family == "Windows"
+      win_shell: |
+        Get-HotFix | Select-Object HotFixID, InstalledOn | ConvertTo-Json
+      register: windows_hotfixes
 
-    - name: Ensure Python is installed (Linux only)
-      raw: test -e /usr/bin/python3 || (apt update && apt install -y python3)
-      when: ansible_os_family != 'Windows'
+    - name: Set hotfix variable for Windows
+      when: ansible_os_family == "Windows"
+      set_fact:
+        hotfix_data: "{{ windows_hotfixes.stdout | from_json }}"
 
-    - name: Collect Windows hotfixes (only if ansible.windows is available)
-      block:
-        - name: Collect Windows hotfixes
-          win_hotfix:
-          register: hotfix_info
+    - name: Set empty hotfix variable for Linux
+      when: ansible_os_family != "Windows"
+      set_fact:
+        hotfix_data: []
 
-        - name: Save hotfixes to inventory file
-          copy:
-            dest: "{{ inventory_file }}"
-            content: |
-              Hostname: {{ ansible_hostname }}
-              OS: {{ ansible_os_family }}
-              Hotfixes:
-              {% for patch in hotfix_info.hotfixes %}
-              - {{ patch.HotFixID }}
-              {% endfor %}
-          when: hotfix_info is defined
-      when: ansible_os_family == 'Windows'
-      ignore_errors: yes  # To prevent failure if module is missing
+    - name: Collect asset inventory data
+      set_fact:
+        asset_data: {
+          "hostname": "{{ ansible_hostname }}",
+          "fqdn": "{{ ansible_fqdn | default('') }}",
+          "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version }}",
+          "kernel": "{{ ansible_kernel | default('') }}",
+          "architecture": "{{ ansible_architecture | default('') }}",
+          "ip_address": "{{ ansible_default_ipv4.address | default('') }}",
+          "mac_address": "{{ ansible_default_ipv4.macaddress | default('') }}",
+          "cpu_cores": "{{ ansible_processor_cores | default('') }}",
+          "cpu_model": "{{ ansible_processor[1] | default('') }}",
+          "ram_mb": "{{ ansible_memtotal_mb | default('') }}",
+          "disk_info": "{{ ansible_devices | default({}) }}",
+          "hotfixes": "{{ hotfix_data }}"
+        }
 
-    - name: Collect Linux system info
-      block:
-        - name: Write system info
-          copy:
-            dest: "{{ inventory_file }}"
-            content: |
-              Hostname: {{ ansible_hostname }}
-              OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-              CPU: {{ ansible_processor[1] | default(ansible_processor[0] | default('N/A')) }}
-              Memory: {{ ansible_memtotal_mb | default('N/A') }} MB
-              Disk Info: {{ ansible_devices | default({}) | to_nice_json }}
-              Installed Packages:
-              {% for name, info in ansible_facts.packages | default({}) %}
-              - {{ name }}: {{ info[0].version }}
-              {% endfor %}
-      when: ansible_os_family != 'Windows'
-
-    - name: Print location of inventory file
-      debug:
-        msg: "Inventory saved to {{ inventory_file }}"
+    - name: Save inventory to JSON file
+      copy:
+        dest: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
+        content: "{{ asset_data | to_nice_json }}"
+        mode: '0644'
