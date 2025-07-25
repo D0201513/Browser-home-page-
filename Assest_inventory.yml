@@ -7,7 +7,7 @@
 
   pre_tasks:
     - name: Ensure output directory exists on remote (Linux only)
-      when: ansible_os_family != "Windows"
+      when: ansible_os_family | default('') != "Windows"
       ansible.builtin.file:
         path: "{{ remote_output_dir }}"
         state: directory
@@ -15,139 +15,140 @@
 
   tasks:
     - name: Gather Windows hotfixes (Windows only)
-      when: ansible_os_family == "Windows"
+      when: ansible_os_family | default('') == "Windows"
       win_shell: |
         Get-HotFix | Select-Object HotFixID, InstalledOn | ConvertTo-Json
       register: windows_hotfixes
 
     - name: Set hotfix variable for Windows
-      when: ansible_os_family == "Windows"
+      when: ansible_os_family | default('') == "Windows"
       set_fact:
         hotfix_data: "{{ windows_hotfixes.stdout | from_json }}"
 
     - name: Set empty hotfix variable for non-Windows
-      when: ansible_os_family != "Windows"
+      when: ansible_os_family | default('') != "Windows"
       set_fact:
         hotfix_data: []
 
     - name: Get MAC address (Windows only)
-      when: ansible_os_family == "Windows"
+      when: ansible_os_family | default('') == "Windows"
       win_shell: |
         Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1 -ExpandProperty MacAddress
       register: mac_result
 
     - name: Set MAC address fact (Windows only)
-      when: ansible_os_family == "Windows"
+      when: ansible_os_family | default('') == "Windows"
       set_fact:
-        mac_address: "{{ mac_result.stdout }}"
+        mac_address: "{{ mac_result.stdout | default('N/A') }}"
 
     - name: Set MAC address fact (non-Windows)
-      when: ansible_os_family != "Windows"
+      when: ansible_os_family | default('') != "Windows"
       set_fact:
-        mac_address: "{{ ansible_default_ipv4.macaddress | default('') }}"
+        mac_address: "{{ ansible_default_ipv4.macaddress | default('N/A') }}"
 
     - name: Collect asset inventory
       set_fact:
         asset_data: {
-          "hostname": "{{ ansible_hostname }}",
-          "fqdn": "{{ ansible_fqdn | default('') }}",
-          "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version }}",
-          "kernel": "{{ ansible_kernel | default('') }}",
-          "architecture": "{{ ansible_architecture | default('') }}",
-          "ip_address": "{{ ansible_default_ipv4.address | default('') }}",
-          "mac_address": "{{ mac_address | default('') }}",
-          "cpu_cores": "{{ ansible_processor_cores | default('') }}",
-          "cpu_model": "{{ ansible_processor[1] | default('') }}",
-          "ram_mb": "{{ ansible_memtotal_mb | default('') }}",
+          "hostname": "{{ ansible_hostname | default('N/A') }}",
+          "fqdn": "{{ ansible_fqdn | default('N/A') }}",
+          "os": "{{ (ansible_distribution | default(ansible_os_family | default('N/A'))) ~ ' ' ~ (ansible_distribution_version | default('')) }}",
+          "kernel": "{{ ansible_kernel | default('N/A') }}",
+          "architecture": "{{ ansible_architecture | default('N/A') }}",
+          "ip_address": "{{ ansible_default_ipv4.address | default('N/A') }}",
+          "mac_address": "{{ mac_address | default('N/A') }}",
+          "cpu_cores": "{{ ansible_processor_cores | default('N/A') }}",
+          "cpu_model": "{{ ansible_processor[1] | default(ansible_processor[0] | default('N/A')) }}",
+          "ram_mb": "{{ ansible_memtotal_mb | default('N/A') }}",
           "disk_info": "{{ ansible_devices | default({}) }}",
           "hotfixes": "{{ hotfix_data }}"
         }
 
     - name: Save asset inventory to JSON on Linux
-      when: ansible_os_family != "Windows"
+      when: ansible_os_family | default('') != "Windows"
       copy:
         dest: "{{ remote_output_dir }}/asset_{{ inventory_hostname }}.json"
         content: "{{ asset_data | to_nice_json }}"
         mode: '0644'
 
     - name: Save asset inventory to JSON on Windows
-      when: ansible_os_family == "Windows"
+      when: ansible_os_family | default('') == "Windows"
       win_copy:
         dest: "C:\\Windows\\Temp\\asset_{{ inventory_hostname }}.json"
         content: "{{ asset_data | to_nice_json }}"
 
     - name: Fetch asset JSON from Linux hosts to control node
-      when: ansible_os_family != "Windows"
+      when: ansible_os_family | default('') != "Windows"
       fetch:
         src: "{{ remote_output_dir }}/asset_{{ inventory_hostname }}.json"
         dest: "{{ local_output_dir }}/"
         flat: yes
 
     - name: Fetch asset JSON from Windows hosts to control node
-      when: ansible_os_family == "Windows"
+      when: ansible_os_family | default('') == "Windows"
       fetch:
         src: "C:\\Windows\\Temp\\asset_{{ inventory_hostname }}.json"
         dest: "{{ local_output_dir }}/"
         flat: yes
 
     - name: Save full inventory (Linux)
+      when: ansible_os_family | default('') != 'Windows'
       copy:
         dest: "{{ remote_output_dir }}/full_inventory_{{ inventory_hostname }}.txt"
         content: |
-          Hostname: {{ ansible_hostname }}
+          Hostname: {{ ansible_hostname | default('N/A') }}
           Manufacturer: {{ ansible_system_vendor | default('N/A') }}
           Model: {{ ansible_product_name | default('N/A') }}
           Serial: {{ ansible_product_serial | default('N/A') }}
           BIOS Version: {{ ansible_bios_version | default('N/A') }}
-          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          Kernel: {{ ansible_kernel }}
-          CPU: {{ ansible_processor[1] | default('N/A') }}
+          OS: {{ ansible_distribution | default('N/A') }} {{ ansible_distribution_version | default('') }}
+          Kernel: {{ ansible_kernel | default('N/A') }}
+          CPU: {{ ansible_processor[1] | default(ansible_processor[0] | default('N/A')) }}
           Cores: {{ ansible_processor_cores | default('N/A') }}
-          RAM: {{ ansible_memtotal_mb }} MB
+          RAM: {{ ansible_memtotal_mb | default('N/A') }} MB
           Disk Info: {{ ansible_devices | to_nice_json }}
-          IP: {{ ansible_default_ipv4.address }}
-          MAC: {{ ansible_default_ipv4.macaddress }}
+          IP: {{ ansible_default_ipv4.address | default('N/A') }}
+          MAC: {{ ansible_default_ipv4.macaddress | default('N/A') }}
           Installed Software:
-          {% for pkg in ansible_facts.packages %}
+          {% for pkg in ansible_facts.packages | default([]) %}
           - {{ pkg }}
           {% endfor %}
-      when: ansible_os_family != 'Windows'
 
     - name: Save full inventory (Windows)
+      when: ansible_os_family | default('') == 'Windows'
       win_copy:
         dest: "C:\\Windows\\Temp\\full_inventory_{{ inventory_hostname }}.txt"
         content: |
-          Hostname: {{ ansible_hostname }}
+          Hostname: {{ ansible_hostname | default('N/A') }}
           Manufacturer: {{ ansible_system_vendor | default('N/A') }}
           Model: {{ ansible_product_name | default('N/A') }}
           Serial: {{ ansible_product_serial | default('N/A') }}
           BIOS Version: {{ ansible_bios_version | default('N/A') }}
           BIOS Vendor: {{ ansible_bios_vendor | default('N/A') }}
-          OS: {{ ansible_os_name }} {{ ansible_os_version }}
-          CPU: {{ ansible_processor[1] | default('N/A') }}
+          OS: {{ ansible_os_name | default(ansible_distribution | default('N/A')) }} {{ ansible_os_version | default(ansible_distribution_version | default('')) }}
+          CPU: {{ ansible_processor[1] | default(ansible_processor[0] | default('N/A')) }}
           Cores: {{ ansible_processor_cores | default('N/A') }}
-          RAM: {{ ansible_memtotal_mb }} MB
+          RAM: {{ ansible_memtotal_mb | default('N/A') }} MB
           Disk Info: {{ ansible_devices | to_nice_json }}
-          IP: {{ ansible_default_ipv4.address }}
-          MAC: {{ ansible_default_ipv4.macaddress }}
+          IP: {{ ansible_default_ipv4.address | default('N/A') }}
+          MAC: {{ ansible_default_ipv4.macaddress | default('N/A') }}
           Installed Software:
-          {% for pkg in ansible_facts.packages %}
-          - {{ pkg.name }} ({{ pkg.version }})
+          {% for pkg in ansible_facts.packages | default([]) %}
+          - {{ pkg.name | default('') }} ({{ pkg.version | default('') }})
           {% endfor %}
           Hotfixes:
           {% for h in hotfix_data %}
-          - {{ h.HotFixID }} installed on {{ h.InstalledOn }}
+          - {{ h.HotFixID | default('') }} installed on {{ h.InstalledOn | default('') }}
           {% endfor %}
 
     - name: Fetch full inventory .txt file from Linux
-      when: ansible_os_family != "Windows"
+      when: ansible_os_family | default('') != "Windows"
       fetch:
         src: "{{ remote_output_dir }}/full_inventory_{{ inventory_hostname }}.txt"
         dest: "{{ local_output_dir }}/"
         flat: yes
 
     - name: Fetch full inventory .txt file from Windows
-      when: ansible_os_family == "Windows"
+      when: ansible_os_family | default('') == "Windows"
       fetch:
         src: "C:\\Windows\\Temp\\full_inventory_{{ inventory_hostname }}.txt"
         dest: "{{ local_output_dir }}/"
