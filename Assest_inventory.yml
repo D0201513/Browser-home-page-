@@ -29,6 +29,22 @@
       set_fact:
         hotfix_data: []
 
+    - name: Get MAC address (Windows only)
+      when: ansible_os_family == "Windows"
+      win_shell: |
+        Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1 -ExpandProperty MacAddress
+      register: mac_result
+
+    - name: Set MAC address fact (Windows only)
+      when: ansible_os_family == "Windows"
+      set_fact:
+        mac_address: "{{ mac_result.stdout }}"
+
+    - name: Set MAC address fact (non-Windows)
+      when: ansible_os_family != "Windows"
+      set_fact:
+        mac_address: "{{ ansible_default_ipv4.macaddress | default('') }}"
+
     - name: Collect asset inventory
       set_fact:
         asset_data: {
@@ -38,7 +54,7 @@
           "kernel": "{{ ansible_kernel | default('') }}",
           "architecture": "{{ ansible_architecture | default('') }}",
           "ip_address": "{{ ansible_default_ipv4.address | default('') }}",
-          "mac_address": "{{ ansible_default_ipv4.macaddress | default('') }}",
+          "mac_address": "{{ mac_address | default('') }}",
           "cpu_cores": "{{ ansible_processor_cores | default('') }}",
           "cpu_model": "{{ ansible_processor[1] | default('') }}",
           "ram_mb": "{{ ansible_memtotal_mb | default('') }}",
