@@ -17,7 +17,7 @@
     - name: Gather Windows hotfixes (only for Windows)
       when: ansible_os_family == "Windows"
       win_shell: |
-        Get-HotFix | Select-Object HotFixID, InstalledOn | ConvertTo-Json -Compress
+        Get-HotFix | Select-Object HotFixID, InstalledOn | ConvertTo-Json
       register: windows_hotfixes
 
     - name: Set hotfix variable for Windows
@@ -32,19 +32,20 @@
 
     - name: Collect asset inventory data
       set_fact:
-        asset_data:
-          hostname: "{{ ansible_hostname }}"
-          fqdn: "{{ ansible_fqdn | default('') }}"
-          os: "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version }}"
-          kernel: "{{ ansible_kernel | default('') }}"
-          architecture: "{{ ansible_architecture | default('') }}"
-          ip_address: "{{ ansible_default_ipv4.address | default('') }}"
-          mac_address: "{{ ansible_default_ipv4.macaddress | default('') }}"
-          cpu_cores: "{{ ansible_processor_cores | default('') }}"
-          cpu_model: "{{ ansible_processor[1] | default('') }}"
-          ram_mb: "{{ ansible_memtotal_mb | default('') }}"
-          disk_info: "{{ ansible_devices | default({}) }}"
-          hotfixes: "{{ hotfix_data }}"
+        asset_data: {
+          "hostname": "{{ ansible_hostname }}",
+          "fqdn": "{{ ansible_fqdn | default('') }}",
+          "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version }}",
+          "kernel": "{{ ansible_kernel | default('') }}",
+          "architecture": "{{ ansible_architecture | default('') }}",
+          "ip_address": "{{ ansible_default_ipv4.address | default('') }}",
+          "mac_address": "{{ ansible_default_ipv4.macaddress | default('') }}",
+          "cpu_cores": "{{ ansible_processor_cores | default('') }}",
+          "cpu_model": "{{ ansible_processor[1] | default('') }}",
+          "ram_mb": "{{ ansible_memtotal_mb | default('') }}",
+          "disk_info": "{{ ansible_devices | default({}) }}",
+          "hotfixes": "{{ hotfix_data }}"
+        }
 
     - name: Save inventory to JSON file
       copy:
