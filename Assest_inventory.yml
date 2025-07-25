@@ -1,75 +1,76 @@
 - name: Collect Asset Inventory from All Systems
   hosts: all
-  gather_facts: yes
-  become: false
+  gather_facts: true
   vars:
     output_dir: "/tmp/asset_inventory"
 
-  tasks:
-
-    - name: Ensure output directory exists on remote (Linux only)
-      file:
+  pre_tasks:
+    - name: Ensure output directory exists (Linux only)
+      when: ansible_os_family != "Windows"
+      ansible.builtin.file:
         path: "{{ output_dir }}"
         state: directory
         mode: '0755'
-      when: ansible_os_family != "Windows"
 
+  tasks:
     - name: Gather Windows hotfixes (Windows only)
-      win_shell: "Get-HotFix | Select-Object -Property HotFixID, Description, InstalledOn | ConvertTo-Json"
-      register: hotfixes
       when: ansible_os_family == "Windows"
+      win_shell: |
+        Get-HotFix | Select-Object HotFixID, InstalledOn | ConvertTo-Json
+      register: windows_hotfixes
 
     - name: Set hotfix variable for Windows
-      set_fact:
-        hotfix_data: "{{ hotfixes.stdout | from_json }}"
       when: ansible_os_family == "Windows"
+      set_fact:
+        hotfix_data: "{{ windows_hotfixes.stdout | from_json }}"
 
     - name: Set empty hotfix variable for non-Windows
+      when: ansible_os_family != "Windows"
       set_fact:
         hotfix_data: []
-      when: ansible_os_family != "Windows"
 
     - name: Get MAC address (Windows only)
-      win_shell: "Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | Select-Object -ExpandProperty MacAddress | Select-Object -First 1"
-      register: mac_result
       when: ansible_os_family == "Windows"
+      win_shell: |
+        Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1 -ExpandProperty MacAddress
+      register: mac_result
 
-    - name: Set MAC fact (Windows)
+    - name: Set MAC address fact (Windows only)
+      when: ansible_os_family == "Windows"
       set_fact:
         mac_address: "{{ mac_result.stdout }}"
-      when: ansible_os_family == "Windows"
 
-    - name: Set MAC fact (Linux)
-      set_fact:
-        mac_address: "{{ ansible_default_ipv4.macaddress | default('N/A') }}"
+    - name: Set MAC address fact (non-Windows)
       when: ansible_os_family != "Windows"
-
-    - name: Get logged-in user (Windows)
-      win_shell: "(Get-WmiObject -Class Win32_ComputerSystem).UserName"
-      register: user_result
-      when: ansible_os_family == "Windows"
-
-    - name: Set user fact (Windows)
       set_fact:
-        current_user: "{{ {'user_name': user_result.stdout | default('N/A')} }}"
-      when: ansible_os_family == "Windows"
+        mac_address: "{{ ansible_default_ipv4.macaddress | default('') }}"
 
-    - name: Save full inventory (Windows)
-      win_copy:
-        dest: "C:\\AssetInventory\\full_inventory_{{ ansible_hostname }}.txt"
-        content: |
-          Hostname: {{ ansible_hostname }}
-          Manufacturer: {{ ansible_system_vendor | default('N/A') }}
-          Model: {{ ansible_product_name | default('N/A') }}
-          Serial: {{ ansible_product_serial | default('N/A') }}
-          BIOS Version: {{ ansible_bios_version | default('N/A') }}
-          OS: {{ ansible_os_name | default('N/A') }}
-          CPU: {{ ansible_processor[1] | default('N/A') }}
-          Cores: {{ ansible_processor_cores | default('N/A') }}
-          RAM: {{ ansible_memtotal_mb | default('N/A') }} MB
-          IP: {{ ansible_default_ipv4.address | default('N/A') }}
-          MAC: {{ mac_address | default('N/A') }}
-          Logged-in User: {{ current_user.user_name | default('N/A') }}
-          Uptime: {{ ansible_uptime_seconds | default('N/A') }} seconds
-          Hotfixes: {{ hotfix_data | to_nice_json }}
+    - name: Collect asset inventory
+      set_fact:
+        asset_data: {
+          "hostname": "{{ ansible_hostname }}",
+          "fqdn": "{{ ansible_fqdn | default('') }}",
+          "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version }}",
+          "kernel": "{{ ansible_kernel | default('') }}",
+          "architecture": "{{ ansible_architecture | default('') }}",
+          "ip_address": "{{ ansible_default_ipv4.address | default('') }}",
+          "mac_address": "{{ mac_address | default('') }}",
+          "cpu_cores": "{{ ansible_processor_cores | default('') }}",
+          "cpu_model": "{{ ansible_processor[1] | default('') }}",
+          "ram_mb": "{{ ansible_memtotal_mb | default('') }}",
+          "disk_info": "{{ ansible_devices | default({}) }}",
+          "hotfixes": "{{ hotfix_data }}"
+        }
+
+    - name: Save asset inventory to JSON (Linux)
+      when: ansible_os_family != "Windows"
+      copy:
+        dest: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
+        content: "{{ asset_data | to_nice_json }}"
+        mode: '0644'
+
+    - name: Save asset inventory to JSON (Windows)
       when: ansible_os_family == "Windows"
+      win_copy:
+        dest: "C:\\Windows\\Temp\\asset_{{ inventory_hostname }}.json"
+        content: "{{ asset_data | to_nice_json }}"
