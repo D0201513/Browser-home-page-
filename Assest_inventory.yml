@@ -48,20 +48,19 @@
 
     - name: Collect asset inventory
       set_fact:
-        asset_data: {
-          "hostname": "{{ ansible_hostname | default('N/A') }}",
-          "fqdn": "{{ ansible_fqdn | default('N/A') }}",
-          "os": "{{ (ansible_distribution | default(ansible_os_family | default('N/A'))) ~ ' ' ~ (ansible_distribution_version | default('')) }}",
-          "kernel": "{{ ansible_kernel | default('N/A') }}",
-          "architecture": "{{ ansible_architecture | default('N/A') }}",
-          "ip_address": "{{ ansible_default_ipv4.address | default('N/A') }}",
-          "mac_address": "{{ mac_address | default('N/A') }}",
-          "cpu_cores": "{{ ansible_processor_cores | default('N/A') }}",
-          "cpu_model": "{{ ansible_processor[1] | default(ansible_processor[0] | default('N/A')) }}",
-          "ram_mb": "{{ ansible_memtotal_mb | default('N/A') }}",
-          "disk_info": "{{ ansible_devices | default({}) }}",
-          "hotfixes": "{{ hotfix_data }}"
-        }
+        asset_data:
+          hostname: "{{ ansible_hostname | default('N/A') }}"
+          fqdn: "{{ ansible_fqdn | default('N/A') }}"
+          os: "{{ (ansible_distribution | default(ansible_os_family | default('N/A'))) ~ ' ' ~ (ansible_distribution_version | default('')) }}"
+          kernel: "{{ ansible_kernel | default('N/A') }}"
+          architecture: "{{ ansible_architecture | default('N/A') }}"
+          ip_address: "{{ ansible_default_ipv4.address | default('N/A') }}"
+          mac_address: "{{ mac_address | default('N/A') }}"
+          cpu_cores: "{{ ansible_processor_cores | default('N/A') }}"
+          cpu_model: "{{ ansible_processor[1] | default(ansible_processor[0] | default('N/A')) }}"
+          ram_mb: "{{ ansible_memtotal_mb | default('N/A') }}"
+          disk_info: "{{ ansible_devices | default({}) }}"
+          hotfixes: "{{ hotfix_data }}"
 
     - name: Save asset inventory to JSON on Linux
       when: ansible_os_family | default('') != "Windows"
@@ -124,7 +123,7 @@
           Serial: {{ ansible_product_serial | default('N/A') }}
           BIOS Version: {{ ansible_bios_version | default('N/A') }}
           BIOS Vendor: {{ ansible_bios_vendor | default('N/A') }}
-          OS: {{ ansible_os_name | default(ansible_distribution | default('N/A')) }} {{ ansible_os_version | default(ansible_distribution_version | default('')) }}
+          OS: {{ ansible_distribution | default('N/A') }} {{ ansible_distribution_version | default('') }}
           CPU: {{ ansible_processor[1] | default(ansible_processor[0] | default('N/A')) }}
           Cores: {{ ansible_processor_cores | default('N/A') }}
           RAM: {{ ansible_memtotal_mb | default('N/A') }} MB
