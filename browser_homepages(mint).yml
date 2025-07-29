@@ -1,48 +1,25 @@
-- name: Disable and lock Firefox password manager on Kali
-  hosts: cinnamon_ubuntu
-  become: true
+---
+- name: Disable and lock Firefox password manager on manually installed Firefox
+  hosts: all
+  become: yes
   tasks:
-    - name: Ensure Firefox policy directory exists
-      ansible.builtin.file:
-        path: /usr/lib/firefox-esr/distribution
+
+    - name: Ensure policy directory exists for Firefox 117
+      file:
+        path: /opt/firefox117/firefox/distribution
         state: directory
         mode: '0755'
 
     - name: Set Firefox policies.json with password manager disabled and locked
-      ansible.builtin.copy:
-        dest: /usr/lib/firefox-esr/distribution/policies.json
+      copy:
+        dest: /opt/firefox117/firefox/distribution/policies.json
         content: |
           {
             "policies": {
-              "Preferences": {
-                "signon.rememberSignons": {
-                  "Value": false,
-                  "Status": "locked"
-                }
-              },
-              "DisplayBookmarksToolbar": true,
-              "NoDefaultBookmarks": true,
-              "OverrideFirstRunPage": "",
-              "OverridePostUpdatePage": "",
-              "Homepage": {
-                "URL": "file:///usr/share/kali-defaults/web/homepage.html",
-                "Locked": false,
-                "StartPage": "homepage"
-              },
-              "DisableTelemetry": true,
-              "NetworkPrediction": false,
-              "DNSOverHTTPS": {
-                "Enabled": false
-              },
-              "CaptivePortal": false,
-              "FirefoxHome": {
-                "Search": true,
-                "TopSites": true,
-                "Highlights": false,
-                "Pocket": false,
-                "Snippets": false,
-                "Locked": false
-              }
+              "DisablePasswordManager": true,
+              "PasswordManagerEnabled": false,
+              "BlockAboutAddons": true,
+              "DisableFirefoxAccounts": true
             }
           }
         mode: '0644'
