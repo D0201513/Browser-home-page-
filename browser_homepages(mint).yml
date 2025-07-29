@@ -1,25 +1,48 @@
----
-- name: Append Firefox policies on Cinnamon Linux safely (no external collections)
-  hosts: cinnamon_ubuntu   # 🟢 This must exactly match your inventory
+- name: Disable and lock Firefox password manager on Kali
+  hosts: cinnamon_ubuntu
   become: true
   tasks:
-
-    - name: Ensure policies.json file exists
+    - name: Ensure Firefox policy directory exists
       ansible.builtin.file:
-        path: /usr/lib/firefox/distribution/policies.json
-        state: touch
-        mode: '0644'
+        path: /usr/lib/firefox-esr/distribution
+        state: directory
+        mode: '0755'
 
-    - name: Append Firefox policies with win_shell fallback
+    - name: Set Firefox policies.json with password manager disabled and locked
       ansible.builtin.copy:
-        dest: /usr/lib/firefox/distribution/policies.json
+        dest: /usr/lib/firefox-esr/distribution/policies.json
         content: |
           {
             "policies": {
-              "BlockAboutConfig": true,
-              "DisableSetDesktopBackground": true,
-              "PasswordManagerEnabled": false,
-              "SyncDisabled": true
+              "Preferences": {
+                "signon.rememberSignons": {
+                  "Value": false,
+                  "Status": "locked"
+                }
+              },
+              "DisplayBookmarksToolbar": true,
+              "NoDefaultBookmarks": true,
+              "OverrideFirstRunPage": "",
+              "OverridePostUpdatePage": "",
+              "Homepage": {
+                "URL": "file:///usr/share/kali-defaults/web/homepage.html",
+                "Locked": false,
+                "StartPage": "homepage"
+              },
+              "DisableTelemetry": true,
+              "NetworkPrediction": false,
+              "DNSOverHTTPS": {
+                "Enabled": false
+              },
+              "CaptivePortal": false,
+              "FirefoxHome": {
+                "Search": true,
+                "TopSites": true,
+                "Highlights": false,
+                "Pocket": false,
+                "Snippets": false,
+                "Locked": false
+              }
             }
           }
         mode: '0644'
