@@ -1,6 +1,6 @@
 ---
 - name: Clear Firefox cache2 directories on Linux for all users
-  hosts: cinnamon_machine
+  hosts: all
   become: true
   gather_facts: false
 
