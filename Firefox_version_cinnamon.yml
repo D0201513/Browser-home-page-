@@ -1,3 +1,4 @@
+---
 - name: Enforce Firefox 117 permanently on Kali Linux and auto-revert on change
   hosts: all
   become: yes
@@ -12,16 +13,26 @@
     cron_job_path: "/etc/cron.d/firefox_enforcer"
 
   tasks:
+
     - name: Create temp directory
       ansible.builtin.file:
         path: "{{ temp_dir }}"
         state: directory
+        mode: '0755'
 
     - name: Download Firefox 117
       ansible.builtin.get_url:
         url: "{{ installer_url }}"
         dest: "{{ installer_archive }}"
         mode: '0644'
+
+    - name: Create target install directory for Firefox 117
+      ansible.builtin.file:
+        path: "{{ install_dir }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
 
     - name: Extract Firefox to custom directory
       ansible.builtin.unarchive:
@@ -30,12 +41,18 @@
         remote_src: yes
         creates: "{{ install_dir }}/firefox"
 
-    - name: Remove system-installed Firefox ESR (optional)
+    - name: Disable system-installed Firefox ESR (if not already moved)
       ansible.builtin.command: mv /usr/lib/firefox-esr /usr/lib/firefox-esr-disabled
       args:
         creates: "/usr/lib/firefox-esr-disabled"
 
-    - name: Fix broken firefox-esr reference by pointing it to Firefox 117
+    - name: Recreate /usr/lib/firefox-esr directory
+      ansible.builtin.file:
+        path: /usr/lib/firefox-esr
+        state: directory
+        mode: '0755'
+
+    - name: Fix firefox-esr by linking to Firefox 117 binary
       ansible.builtin.file:
         src: "{{ install_dir }}/firefox/firefox"
         dest: "/usr/lib/firefox-esr/firefox-esr"
@@ -45,27 +62,27 @@
     - name: Prevent Firefox ESR from being upgraded
       ansible.builtin.command: apt-mark hold firefox-esr
 
-    - name: Force symbolic link to custom Firefox binary
+    - name: Force /usr/bin/firefox to point to custom Firefox binary
       ansible.builtin.file:
         src: "{{ install_dir }}/firefox/firefox"
         dest: "/usr/bin/firefox"
         state: link
         force: true
 
-    - name: Create version check script to auto-revert
+    - name: Create version check script to auto-revert changes
       ansible.builtin.copy:
         dest: "{{ check_script_path }}"
         mode: '0755'
         content: |
           #!/bin/bash
-          # Revert Firefox if version is changed or symlink is missing
           correct_path="{{ install_dir }}/firefox/firefox"
           symlink_path="/usr/bin/firefox"
-          if [[ ! -L "$symlink_path" || "$(readlink -f $symlink_path)" != "$correct_path" ]]; then
+          if [[ ! -L "$symlink_path" || "$(readlink -f "$symlink_path")" != "$correct_path" ]]; then
+            echo "[INFO] Firefox symlink changed. Reverting to {{ install_dir }}/firefox/firefox"
             ln -sf "$correct_path" "$symlink_path"
           fi
 
-    - name: Schedule cron job to check Firefox version at reboot
+    - name: Schedule cron job to enforce correct Firefox version on reboot
       ansible.builtin.copy:
         dest: "{{ cron_job_path }}"
         mode: '0644'
