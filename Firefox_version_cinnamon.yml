@@ -5,7 +5,6 @@
   vars:
     firefox_version: "117.0"
     temp_dir: "/opt/temp"
-    firefox_path: "/usr/lib/firefox-esr/firefox"
     installer_url: "https://ftp.mozilla.org/pub/firefox/releases/117.0/linux-x86_64/en-US/firefox-117.0.tar.bz2"
     installer_archive: "{{ temp_dir }}/firefox-117.0.tar.bz2"
     install_dir: "/opt/firefox117"
@@ -13,6 +12,11 @@
     cron_job_path: "/etc/cron.d/firefox_enforcer"
 
   tasks:
+
+    - name: Clean up old install directory (optional)
+      ansible.builtin.file:
+        path: "{{ install_dir }}"
+        state: absent
 
     - name: Create temp directory
       ansible.builtin.file:
@@ -39,7 +43,6 @@
         src: "{{ installer_archive }}"
         dest: "{{ install_dir }}"
         remote_src: yes
-        creates: "{{ install_dir }}/firefox"
 
     - name: Check if firefox-esr directory exists
       ansible.builtin.stat:
@@ -58,15 +61,22 @@
         state: directory
         mode: '0755'
 
-    - name: Fix firefox-esr by linking to Firefox 117 binary
+    - name: Link firefox-esr to Firefox 117 binary
       ansible.builtin.file:
         src: "{{ install_dir }}/firefox/firefox"
         dest: "/usr/lib/firefox-esr/firefox-esr"
         state: link
         force: true
 
-    - name: Prevent Firefox ESR from being upgraded
+    - name: Check if firefox-esr is available in APT
+      ansible.builtin.command: apt-cache policy firefox-esr
+      register: firefox_esr_policy
+      changed_when: false
+      failed_when: false
+
+    - name: Prevent Firefox ESR from being upgraded (only if available)
       ansible.builtin.command: apt-mark hold firefox-esr
+      when: '"Candidate: (none)" not in firefox_esr_policy.stdout'
 
     - name: Force /usr/bin/firefox to point to custom Firefox binary
       ansible.builtin.file:
@@ -84,7 +94,7 @@
           correct_path="{{ install_dir }}/firefox/firefox"
           symlink_path="/usr/bin/firefox"
           if [[ ! -L "$symlink_path" || "$(readlink -f "$symlink_path")" != "$correct_path" ]]; then
-            echo "[INFO] Firefox symlink changed. Reverting to {{ install_dir }}/firefox/firefox"
+            echo "[INFO] Firefox symlink changed. Reverting to Firefox 117."
             ln -sf "$correct_path" "$symlink_path"
           fi
 
