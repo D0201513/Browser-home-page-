@@ -41,10 +41,16 @@
         remote_src: yes
         creates: "{{ install_dir }}/firefox"
 
-    - name: Disable system-installed Firefox ESR (if not already moved)
+    - name: Check if firefox-esr directory exists
+      ansible.builtin.stat:
+        path: /usr/lib/firefox-esr
+      register: firefox_esr_dir
+
+    - name: Disable system-installed Firefox ESR (if it exists)
       ansible.builtin.command: mv /usr/lib/firefox-esr /usr/lib/firefox-esr-disabled
-      args:
-        creates: "/usr/lib/firefox-esr-disabled"
+      when:
+        - firefox_esr_dir.stat.exists
+        - not firefox_esr_dir.stat.islnk
 
     - name: Recreate /usr/lib/firefox-esr directory
       ansible.builtin.file:
