@@ -14,16 +14,25 @@
       set_fact:
         cpu_model: "{{ cpu_model_output.stdout_lines[0] | trim }}"
 
-    - name: Extract processor generation (Intel only, basic logic)
+    - name: Extract processor generation (Intel only - smart match)
       set_fact:
         cpu_generation: >-
-          {% set match = cpu_model | regex_search('i[3579]-([0-9]{4,5})[A-Z]*', '\\1') %}
-          {% if match|length == 5 %}
-            {{ match[:2] }}th Gen
-          {% elif match|length == 4 %}
-            {{ match[:1] }}th Gen
+          {% set gen = cpu_model | regex_search('([0-9]{1,2})th Gen', '\\1') %}
+          {% if gen %}
+            {{ gen }}th Gen
           {% else %}
-            Unknown
+            {% set match = cpu_model | regex_search('i[3579]-([0-9]{4,5})', '\\1') %}
+            {% if match %}
+              {% if match|length == 5 %}
+                {{ match[:2] }}th Gen
+              {% elif match|length == 4 %}
+                {{ match[:1] }}th Gen
+              {% else %}
+                Unknown
+              {% endif %}
+            {% else %}
+              Unknown
+            {% endif %}
           {% endif %}
 
     - name: Get system serial number
