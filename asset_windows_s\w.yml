@@ -1,0 +1,18 @@
+- name: Collect Installed Software from Windows Systems
+  hosts: all
+  gather_facts: false
+  vars:
+    output_dir: "C:\\Windows\\Temp"
+
+  tasks:
+    - name: Get installed programs via registry
+      win_shell: |
+        Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
+        Select-Object DisplayName, DisplayVersion, Publisher, InstallDate |
+        Where-Object { $_.DisplayName } | ConvertTo-Json
+      register: installed_software
+
+    - name: Save installed software info to JSON
+      win_copy:
+        dest: "{{ output_dir }}\\software_{{ inventory_hostname }}.json"
+        content: "{{ installed_software.stdout }}"
