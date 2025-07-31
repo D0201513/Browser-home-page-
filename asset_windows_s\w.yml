@@ -19,16 +19,26 @@
         }
 
         $yaml = $structured | ConvertTo-Yaml
-        Set-Content -Path 'C:\software_inventory.yaml' -Value $yaml -Encoding utf8
+        Set-Content -Path "C:\software_inventory.yaml" -Value $yaml -Encoding utf8
       args:
         executable: powershell.exe
 
     - name: Confirm YAML file created
       win_stat:
-        path: 'C:\software_inventory.yaml'
+        path: "C:\software_inventory.yaml"
       register: yaml_check
 
     - name: Debug path of saved YAML file
       debug:
         msg: "YAML file saved at C:\\software_inventory.yaml"
+      when: yaml_check.stat.exists
+
+    - name: Read the YAML content
+      win_shell: Get-Content -Path 'C:\software_inventory.yaml'
+      register: software_yaml_output
+      when: yaml_check.stat.exists
+
+    - name: Show the YAML content
+      debug:
+        var: software_yaml_output.stdout_lines
       when: yaml_check.stat.exists
