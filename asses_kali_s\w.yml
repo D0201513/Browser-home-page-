@@ -1,6 +1,6 @@
 ---
 - name: Collect Installed Software from Kali Linux Systems
-  hosts: linux
+  hosts: all
   become: yes
   gather_facts: no
 
