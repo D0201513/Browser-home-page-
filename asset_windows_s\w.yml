@@ -1,18 +1,40 @@
+---
 - name: Collect Installed Software from Windows Systems
-  hosts: all
-  gather_facts: false
-  vars:
-    output_dir: "C:\\Windows\\Temp"
-
+  hosts: windows
+  gather_facts: no
   tasks:
     - name: Get installed programs via registry
-      win_shell: |
-        Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
-        Select-Object DisplayName, DisplayVersion, Publisher, InstallDate |
-        Where-Object { $_.DisplayName } | ConvertTo-Json
+      win_reg_stat:
+        path: HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall
       register: installed_software
 
-    - name: Save installed software info to JSON
-      win_copy:
-        dest: "{{ output_dir }}\\software_{{ inventory_hostname }}.json"
-        content: "{{ installed_software.stdout }}"
+    - name: Parse installed software info
+      win_shell: |
+        Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
+        Select-Object DisplayName, DisplayVersion, Publisher, InstallDate |
+        Where-Object { $_.DisplayName } |
+        ConvertTo-Json
+      register: software_list
+
+    - name: Save software inventory as JSON
+      copy:
+        content: "{{ software_list.stdout }}"
+        dest: "C:\\software_inventory.json"
+
+    - name: Convert software list to table format
+      win_shell: |
+        $output = @()
+        $software = Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
+          Select-Object DisplayName, DisplayVersion, Publisher, InstallDate |
+          Where-Object { $_.DisplayName }
+
+        $index = 1
+        foreach ($app in $software) {
+          $line = '{0,3} | {1,-45} | {2,-20} | {3,-25} | {4}' -f $index, $app.DisplayName, $app.DisplayVersion, $app.Publisher, $app.InstallDate
+          $output += $line
+          $index++
+        }
+
+        $output | Out-File -FilePath C:\software_inventory_table.txt -Encoding utf8
+      args:
+        executable: powershell.exe
