@@ -3,38 +3,32 @@
   hosts: windows
   gather_facts: no
   tasks:
-    - name: Get installed programs via registry
-      win_reg_stat:
-        path: HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall
-      register: installed_software
-
-    - name: Parse installed software info
+    - name: Get installed programs from registry and convert to YAML
       win_shell: |
-        Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
-        Select-Object DisplayName, DisplayVersion, Publisher, InstallDate |
-        Where-Object { $_.DisplayName } |
-        ConvertTo-Json
-      register: software_list
-
-    - name: Save software inventory as JSON
-      copy:
-        content: "{{ software_list.stdout }}"
-        dest: "C:\\software_inventory.json"
-
-    - name: Convert software list to table format
-      win_shell: |
-        $output = @()
         $software = Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
           Select-Object DisplayName, DisplayVersion, Publisher, InstallDate |
           Where-Object { $_.DisplayName }
 
-        $index = 1
-        foreach ($app in $software) {
-          $line = '{0,3} | {1,-45} | {2,-20} | {3,-25} | {4}' -f $index, $app.DisplayName, $app.DisplayVersion, $app.Publisher, $app.InstallDate
-          $output += $line
-          $index++
+        $structured = $software | ForEach-Object {
+          [PSCustomObject]@{
+            DisplayName     = $_.DisplayName
+            DisplayVersion  = $_.DisplayVersion
+            Publisher       = $_.Publisher
+            InstallDate     = $_.InstallDate
+          }
         }
 
-        $output | Out-File -FilePath C:\software_inventory_table.txt -Encoding utf8
+        $yaml = $structured | ConvertTo-Yaml
+        Set-Content -Path "C:\software_inventory.yaml" -Value $yaml -Encoding utf8
       args:
         executable: powershell.exe
+
+    - name: Confirm YAML file created
+      win_stat:
+        path: "C:\software_inventory.yaml"
+      register: yaml_check
+
+    - name: Debug path of saved YAML file
+      debug:
+        msg: "YAML file saved at C:\\software_inventory.yaml"
+      when: yaml_check.stat.exists
