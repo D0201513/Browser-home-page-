@@ -79,7 +79,7 @@
 
         - name: Ensure control node destination directory exists (optional)
           delegate_to: localhost
-          run_once: true
+          run_once: false
           file:
             path: "{{ control_node_path }}"
             state: directory
