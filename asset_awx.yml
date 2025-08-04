@@ -4,9 +4,9 @@
   become: true
   vars:
     output_dir: "/tmp/asset_inventory"
-    control_node_ip: "172.17.9.132"
-    control_node_path: "/opt/awx-inventory-facts"
-    control_node_user: "mduroot"
+    control_node_ip: "172.17.9.132"                  # Your AWX control node IP
+    control_node_path: "/opt/awx-inventory-facts"    # Folder must exist or be created
+    control_node_user: "mduroot"                     # Must support passwordless SSH
 
   tasks:
     - name: Run only on Linux
@@ -77,10 +77,23 @@
             content: "{{ asset_data | to_nice_json }}"
             mode: '0644'
 
+        - name: Ensure control node destination directory exists (optional)
+          delegate_to: localhost
+          run_once: true
+          file:
+            path: "{{ control_node_path }}"
+            state: directory
+            mode: '0755'
+
         - name: Send JSON to Control Node via SCP
-          shell: |
-            scp {{ output_dir }}/asset_{{ inventory_hostname }}.json {{ control_node_user }}@{{ control_node_ip }}:{{ control_node_path }}/
+          shell: >
+            scp {{ output_dir }}/asset_{{ inventory_hostname }}.json
+            {{ control_node_user }}@{{ control_node_ip }}:{{ control_node_path }}/
           args:
             executable: /bin/bash
-          ignore_errors: true
+          register: scp_result
+          ignore_errors: false
 
+        - name: Show SCP output for debugging
+          debug:
+            var: scp_result.stderr_lines
