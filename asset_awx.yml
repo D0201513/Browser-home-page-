@@ -80,6 +80,7 @@
         - name: Create folder on exporter/controller node
           delegate_to: localhost
           run_once: true
+          become: false
           file:
             path: /opt/awx-inventory-facts/
             state: directory
@@ -90,6 +91,7 @@
             src: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
             dest: "/opt/awx-inventory-facts/"
             flat: yes
+            become: false
 
 
 ##################################################################
