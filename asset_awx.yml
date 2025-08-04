@@ -1,26 +1,26 @@
 - name: Collect Asset Inventory from All Systems
   hosts: all
   gather_facts: true
-  become: "{{ ansible_os_family != 'Windows' }}"
+  become: true  # Use static become (required for Linux), handled dynamically inside tasks
   vars:
     output_dir: "/tmp/asset_inventory"
 
   pre_tasks:
-    - name: Ensure output directory exists on client
+    - name: Ensure output directory exists on client (Linux only)
       ansible.builtin.file:
         path: "{{ output_dir }}"
         state: directory
         mode: '0755'
+      when: ansible_os_family != 'Windows'
 
   tasks:
     - name: Get CPU model (Linux only)
-      when: ansible_os_family != 'Windows'
       shell: "lscpu | grep 'Model name' | awk -F: '{print $2}'"
       register: cpu_model_output
       changed_when: false
-
-    - name: Set CPU model and generation (Linux only)
       when: ansible_os_family != 'Windows'
+
+    - name: Set CPU model and generation (Linux)
       set_fact:
         cpu_model: "{{ cpu_model_output.stdout | default('Unknown') | trim }}"
         cpu_generation: >-
@@ -36,20 +36,21 @@
           {% else %}
             Unknown
           {% endif %}
+      when: ansible_os_family != 'Windows'
 
-    - name: Set CPU facts for Windows
-      when: ansible_os_family == 'Windows'
+    - name: Set CPU model and generation (Windows)
       set_fact:
         cpu_model: "{{ ansible_processor[1] | default('Unknown') }}"
         cpu_generation: "Unknown"
+      when: ansible_os_family == 'Windows'
 
     - name: Get system serial number (Linux only)
-      when: ansible_os_family != 'Windows'
       shell: "dmidecode -s system-serial-number"
       register: serial_output
       changed_when: false
+      when: ansible_os_family != 'Windows'
 
-    - name: Set common hardware facts
+    - name: Set memory and identity facts (cross-platform)
       set_fact:
         serial_number: >-
           {% if ansible_os_family != 'Windows' %}
@@ -62,7 +63,7 @@
         ram_mb_total: "{{ ansible_memory_mb.real.total | default(0) }}"
         ram_used_pct: "{{ ((ansible_memory_mb.real.used | default(0)) * 100) // (ansible_memory_mb.real.total | default(1)) }}"
 
-    - name: Collect asset data
+    - name: Collect asset data into variable
       set_fact:
         asset_data: {
           "hostname": "{{ ansible_hostname }}",
@@ -86,7 +87,7 @@
         mode: '0644'
 
     #########################################################################
-    # 🔁 Copy JSON to Central Exporter Directory
+    # 🔁 Fetch JSON files to AWX Exporter machine for Prometheus scraping
     #########################################################################
 
     - name: Create folder on exporter/controller node
@@ -97,7 +98,7 @@
         state: directory
         mode: '0755'
 
-    - name: Fetch JSON from host to exporter directory
+    - name: Fetch JSON from client to exporter
       fetch:
         src: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
         dest: "/opt/awx-inventory-facts/"
