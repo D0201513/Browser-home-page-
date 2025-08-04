@@ -1,7 +1,7 @@
-- name: Collect Asset Inventory from Linux Systems
+- name: Collect Asset Inventory from All Systems
   hosts: all
   gather_facts: true
-  become: true
+  become: "{{ ansible_os_family != 'Windows' }}"
   vars:
     output_dir: "/tmp/asset_inventory"
 
@@ -13,16 +13,18 @@
         mode: '0755'
 
   tasks:
-    - name: Get CPU model
+    - name: Get CPU model (Linux only)
+      when: ansible_os_family != 'Windows'
       shell: "lscpu | grep 'Model name' | awk -F: '{print $2}'"
       register: cpu_model_output
       changed_when: false
 
-    - name: Set CPU model and generation
+    - name: Set CPU model and generation (Linux only)
+      when: ansible_os_family != 'Windows'
       set_fact:
-        cpu_model: "{{ cpu_model_output.stdout | trim }}"
+        cpu_model: "{{ cpu_model_output.stdout | default('Unknown') | trim }}"
         cpu_generation: >-
-          {% set match = cpu_model | regex_search('i[3579]-([0-9]{4,5})[A-Z]*', '\\1') %}
+          {% set match = cpu_model_output.stdout | regex_search('i[3579]-([0-9]{4,5})[A-Z]*', '\\1') %}
           {% if match is not none %}
             {% if match | length == 5 %}
               {{ match[:2] }}th Gen
@@ -35,18 +37,30 @@
             Unknown
           {% endif %}
 
-    - name: Get system serial number
+    - name: Set CPU facts for Windows
+      when: ansible_os_family == 'Windows'
+      set_fact:
+        cpu_model: "{{ ansible_processor[1] | default('Unknown') }}"
+        cpu_generation: "Unknown"
+
+    - name: Get system serial number (Linux only)
+      when: ansible_os_family != 'Windows'
       shell: "dmidecode -s system-serial-number"
       register: serial_output
       changed_when: false
 
-    - name: Set dynamic memory facts
+    - name: Set common hardware facts
       set_fact:
-        serial_number: "{{ serial_output.stdout | trim }}"
+        serial_number: >-
+          {% if ansible_os_family != 'Windows' %}
+            {{ serial_output.stdout | default('Unknown') | trim }}
+          {% else %}
+            {{ ansible_product_serial_number | default('Unknown') }}
+          {% endif %}
         mac_address: "{{ ansible_default_ipv4.macaddress | default('') }}"
-        ram_mb_used: "{{ ansible_memory_mb.real.used }}"
-        ram_mb_total: "{{ ansible_memory_mb.real.total }}"
-        ram_used_pct: "{{ (ansible_memory_mb.real.used * 100) // ansible_memory_mb.real.total }}"
+        ram_mb_used: "{{ ansible_memory_mb.real.used | default(0) }}"
+        ram_mb_total: "{{ ansible_memory_mb.real.total | default(0) }}"
+        ram_used_pct: "{{ ((ansible_memory_mb.real.used | default(0)) * 100) // (ansible_memory_mb.real.total | default(1)) }}"
 
     - name: Collect asset data
       set_fact:
@@ -61,7 +75,7 @@
           "ram_used_pct": "{{ ram_used_pct }}",
           "serial_number": "{{ serial_number }}",
           "disk_info": "{{ ansible_devices | default({}) }}",
-          "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version }}",
+          "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version | default('Unknown') }}",
           "kernel": "{{ ansible_kernel | default('') }}"
         }
 
@@ -72,7 +86,7 @@
         mode: '0644'
 
     #########################################################################
-    # 🔁 Fetch JSON to central exporter folder (shared with AWX Exporter)
+    # 🔁 Copy JSON to Central Exporter Directory
     #########################################################################
 
     - name: Create folder on exporter/controller node
