@@ -1,105 +1,146 @@
-- name: Collect Asset Inventory from All Systems
+##################################################################
+# 🔧 Part 1: Linux Hosts (with become)
+##################################################################
+- name: Collect Inventory from Linux Systems
   hosts: all
   gather_facts: true
-  become: true  # Use static become (required for Linux), handled dynamically inside tasks
+  become: true
   vars:
     output_dir: "/tmp/asset_inventory"
 
-  pre_tasks:
-    - name: Ensure output directory exists on client (Linux only)
-      ansible.builtin.file:
-        path: "{{ output_dir }}"
-        state: directory
-        mode: '0755'
+  tasks:
+    - name: Run only on Linux
       when: ansible_os_family != 'Windows'
+      block:
+
+        - name: Ensure output directory exists
+          ansible.builtin.file:
+            path: "{{ output_dir }}"
+            state: directory
+            mode: '0755'
+
+        - name: Get CPU model
+          shell: "lscpu | grep 'Model name' | awk -F: '{print $2}'"
+          register: cpu_model_output
+          changed_when: false
+
+        - name: Set CPU model and generation
+          set_fact:
+            cpu_model: "{{ cpu_model_output.stdout | default('Unknown') | trim }}"
+            cpu_generation: >-
+              {% set match = cpu_model_output.stdout | regex_search('i[3579]-([0-9]{4,5})[A-Z]*', '\\1') %}
+              {% if match is not none %}
+                {% if match | length == 5 %}
+                  {{ match[:2] }}th Gen
+                {% elif match | length == 4 %}
+                  {{ match[:1] }}th Gen
+                {% else %}
+                  Unknown
+                {% endif %}
+              {% else %}
+                Unknown
+              {% endif %}
+
+        - name: Get system serial number
+          shell: "dmidecode -s system-serial-number"
+          register: serial_output
+          changed_when: false
+
+        - name: Set Linux memory and identity facts
+          set_fact:
+            serial_number: "{{ serial_output.stdout | default('Unknown') | trim }}"
+            mac_address: "{{ ansible_default_ipv4.macaddress | default('') }}"
+            ram_mb_used: "{{ ansible_memory_mb.real.used | default(0) }}"
+            ram_mb_total: "{{ ansible_memory_mb.real.total | default(0) }}"
+            ram_used_pct: "{{ ((ansible_memory_mb.real.used | default(0)) * 100) // (ansible_memory_mb.real.total | default(1)) }}"
+
+        - name: Collect asset data
+          set_fact:
+            asset_data: {
+              "hostname": "{{ ansible_hostname }}",
+              "ip_address": "{{ ansible_default_ipv4.address | default('') }}",
+              "mac_address": "{{ mac_address }}",
+              "cpu_model": "{{ cpu_model }}",
+              "cpu_generation": "{{ cpu_generation }}",
+              "ram_mb_used": "{{ ram_mb_used }}",
+              "ram_mb_total": "{{ ram_mb_total }}",
+              "ram_used_pct": "{{ ram_used_pct }}",
+              "serial_number": "{{ serial_number }}",
+              "disk_info": "{{ ansible_devices | default({}) }}",
+              "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version | default('Unknown') }}",
+              "kernel": "{{ ansible_kernel | default('') }}"
+            }
+
+        - name: Save asset inventory to JSON on Linux
+          copy:
+            dest: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
+            content: "{{ asset_data | to_nice_json }}"
+            mode: '0644'
+
+        - name: Create folder on exporter/controller node
+          delegate_to: localhost
+          run_once: true
+          file:
+            path: /opt/awx-inventory-facts/
+            state: directory
+            mode: '0755'
+
+        - name: Fetch JSON from Linux host to exporter
+          fetch:
+            src: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
+            dest: "/opt/awx-inventory-facts/"
+            flat: yes
+
+
+##################################################################
+# 🪟 Part 2: Windows Hosts (no become)
+##################################################################
+- name: Collect Inventory from Windows Systems
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    output_dir: "C:\\Temp\\asset_inventory"
 
   tasks:
-    - name: Get CPU model (Linux only)
-      shell: "lscpu | grep 'Model name' | awk -F: '{print $2}'"
-      register: cpu_model_output
-      changed_when: false
-      when: ansible_os_family != 'Windows'
-
-    - name: Set CPU model and generation (Linux)
-      set_fact:
-        cpu_model: "{{ cpu_model_output.stdout | default('Unknown') | trim }}"
-        cpu_generation: >-
-          {% set match = cpu_model_output.stdout | regex_search('i[3579]-([0-9]{4,5})[A-Z]*', '\\1') %}
-          {% if match is not none %}
-            {% if match | length == 5 %}
-              {{ match[:2] }}th Gen
-            {% elif match | length == 4 %}
-              {{ match[:1] }}th Gen
-            {% else %}
-              Unknown
-            {% endif %}
-          {% else %}
-            Unknown
-          {% endif %}
-      when: ansible_os_family != 'Windows'
-
-    - name: Set CPU model and generation (Windows)
-      set_fact:
-        cpu_model: "{{ ansible_processor[1] | default('Unknown') }}"
-        cpu_generation: "Unknown"
+    - name: Run only on Windows
       when: ansible_os_family == 'Windows'
+      block:
 
-    - name: Get system serial number (Linux only)
-      shell: "dmidecode -s system-serial-number"
-      register: serial_output
-      changed_when: false
-      when: ansible_os_family != 'Windows'
+        - name: Set Windows asset facts
+          set_fact:
+            cpu_model: "{{ ansible_processor[1] | default('Unknown') }}"
+            cpu_generation: "Unknown"
+            serial_number: "{{ ansible_product_serial_number | default('Unknown') }}"
+            mac_address: "{{ ansible_default_ipv4.macaddress | default('') }}"
+            ram_mb_used: "{{ ansible_memory_mb.real.used | default(0) }}"
+            ram_mb_total: "{{ ansible_memory_mb.real.total | default(0) }}"
+            ram_used_pct: "{{ ((ansible_memory_mb.real.used | default(0)) * 100) // (ansible_memory_mb.real.total | default(1)) }}"
 
-    - name: Set memory and identity facts (cross-platform)
-      set_fact:
-        serial_number: >-
-          {% if ansible_os_family != 'Windows' %}
-            {{ serial_output.stdout | default('Unknown') | trim }}
-          {% else %}
-            {{ ansible_product_serial_number | default('Unknown') }}
-          {% endif %}
-        mac_address: "{{ ansible_default_ipv4.macaddress | default('') }}"
-        ram_mb_used: "{{ ansible_memory_mb.real.used | default(0) }}"
-        ram_mb_total: "{{ ansible_memory_mb.real.total | default(0) }}"
-        ram_used_pct: "{{ ((ansible_memory_mb.real.used | default(0)) * 100) // (ansible_memory_mb.real.total | default(1)) }}"
+        - name: Collect asset data
+          set_fact:
+            asset_data: {
+              "hostname": "{{ ansible_hostname }}",
+              "ip_address": "{{ ansible_default_ipv4.address | default('') }}",
+              "mac_address": "{{ mac_address }}",
+              "cpu_model": "{{ cpu_model }}",
+              "cpu_generation": "{{ cpu_generation }}",
+              "ram_mb_used": "{{ ram_mb_used }}",
+              "ram_mb_total": "{{ ram_mb_total }}",
+              "ram_used_pct": "{{ ram_used_pct }}",
+              "serial_number": "{{ serial_number }}",
+              "disk_info": "{{ ansible_devices | default({}) }}",
+              "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version | default('Unknown') }}",
+              "kernel": "{{ ansible_kernel | default('') }}"
+            }
 
-    - name: Collect asset data into variable
-      set_fact:
-        asset_data: {
-          "hostname": "{{ ansible_hostname }}",
-          "ip_address": "{{ ansible_default_ipv4.address | default('') }}",
-          "mac_address": "{{ mac_address }}",
-          "cpu_model": "{{ cpu_model }}",
-          "cpu_generation": "{{ cpu_generation }}",
-          "ram_mb_used": "{{ ram_mb_used }}",
-          "ram_mb_total": "{{ ram_mb_total }}",
-          "ram_used_pct": "{{ ram_used_pct }}",
-          "serial_number": "{{ serial_number }}",
-          "disk_info": "{{ ansible_devices | default({}) }}",
-          "os": "{{ ansible_distribution ~ ' ' ~ ansible_distribution_version | default('Unknown') }}",
-          "kernel": "{{ ansible_kernel | default('') }}"
-        }
+        - name: Save asset inventory to JSON (Windows)
+          win_copy:
+            content: "{{ asset_data | to_nice_json }}"
+            dest: "{{ output_dir }}\\asset_{{ inventory_hostname }}.json"
 
-    - name: Save asset inventory to JSON on client
-      copy:
-        dest: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
-        content: "{{ asset_data | to_nice_json }}"
-        mode: '0644'
-
-    #########################################################################
-    # 🔁 Fetch JSON files to AWX Exporter machine for Prometheus scraping
-    #########################################################################
-
-    - name: Create folder on exporter/controller node
-      delegate_to: localhost
-      run_once: true
-      file:
-        path: /opt/awx-inventory-facts/
-        state: directory
-        mode: '0755'
-
-    - name: Fetch JSON from client to exporter
-      fetch:
-        src: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
-        dest: "/opt/awx-inventory-facts/"
-        flat: yes
+        - name: Fetch JSON from Windows to exporter
+          fetch:
+            src: "{{ output_dir }}\\asset_{{ inventory_hostname }}.json"
+            dest: "/opt/awx-inventory-facts/"
+            flat: yes
