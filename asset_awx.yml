@@ -82,14 +82,14 @@
           run_once: true
           become: false
           file:
-            path: /opt/awx-inventory-facts/
+            path: /tmp/awx-inventory-facts/
             state: directory
             mode: '0755'
 
         - name: Fetch JSON from Linux host to exporter
           fetch:
             src: "{{ output_dir }}/asset_{{ inventory_hostname }}.json"
-            dest: "/opt/awx-inventory-facts/"
+            dest: "/tmp/awx-inventory-facts/"
             flat: yes
             become: false
 
@@ -144,5 +144,5 @@
         - name: Fetch JSON from Windows to exporter
           fetch:
             src: "{{ output_dir }}\\asset_{{ inventory_hostname }}.json"
-            dest: "/opt/awx-inventory-facts/"
+            dest: "/tmp/awx-inventory-facts/"
             flat: yes
