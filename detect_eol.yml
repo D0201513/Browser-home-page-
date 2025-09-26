@@ -26,8 +26,8 @@
         "7": "2024-06-30"
         "8": "2021-12-31"
 
-    # Map Ubuntu codenames to version numbers
-    ubuntu_codename_to_version_map:
+    # Ubuntu codename → version map
+    ubuntu_codename_to_version:
       xenial: "16.04"
       bionic: "18.04"
       focal: "20.04"
@@ -35,19 +35,19 @@
       noble: "24.04"
 
   tasks:
-    - name: Detect OS details safely
+    - name: Detect OS details
       set_fact:
         distro: "{{ ansible_distribution | default('Unknown') }}"
-        version: >-
-          {{ (ansible_distribution_version.split('.')[0:2] | join('.'))
-             if (ansible_distribution_version is defined) else 'Unknown' }}
+        version: "{{ (ansible_distribution_version.split('.')[0:2] | join('.')) if (ansible_distribution_version is defined) else 'Unknown' }}"
         ubuntu_codename: "{{ ansible_lsb.codename | default('Unknown') }}"
 
     - name: Determine EOL date
       set_fact:
         eol_date: >-
           {% if distro == 'Linux Mint' %}
-            {{ ubuntu_eol_dates.get(ubuntu_codename_to_version_map.get(ubuntu_codename | lower, 'Unknown'), 'Unknown') }}
+            {{ ubuntu_eol_dates.get(ubuntu_codename_to_version.get(ubuntu_codename | lower, 'Unknown'), 'Unknown') }}
+          {% elif distro == 'Ubuntu' %}
+            {{ ubuntu_eol_dates.get(version, 'Unknown') }}
           {% else %}
             {{ eol_dates.get(distro, {}).get(version, 'Unknown') }}
           {% endif %}
