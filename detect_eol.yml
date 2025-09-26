@@ -4,7 +4,6 @@
   gather_facts: yes
   become: false
   vars:
-    # Example EOL lookup table (update as needed)
     ubuntu_eol_dates:
       trusty: "2019-04-30"
       xenial: "2021-04-30"
@@ -18,7 +17,6 @@
       xia: "Unknown"  # Example; update as needed
 
   tasks:
-
     - name: Detect OS details
       set_fact:
         distro: "{{ ansible_distribution }}"
@@ -35,6 +33,9 @@
           {% else %}
           Unknown
           {% endif %}
+
+    - name: Determine EOL status
+      set_fact:
         eol_status: >-
           {% if eol_date == 'Unknown' %}
           Unknown
@@ -54,7 +55,7 @@
 
     - name: Debug per-host EOL status
       debug:
-        msg: "EOL Status: {{ eol_status }}"
+        msg: "EOL Status for {{ inventory_hostname }}: {{ eol_status }}"
 
 - name: Consolidate Linux EOL report
   hosts: localhost
