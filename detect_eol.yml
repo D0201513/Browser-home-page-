@@ -1,0 +1,66 @@
+---
+- name: Detect Linux OS End of Life (EOL) status
+  hosts: all
+  gather_facts: yes
+  vars:
+    # EOL reference data (update as new versions are released)
+    eol_dates:
+      Ubuntu:
+        "16.04": "2021-04-30"
+        "18.04": "2023-05-31"
+        "20.04": "2025-04-30"
+        "22.04": "2027-04-30"
+        "24.04": "2029-04-30"
+
+      Debian:
+        "9": "2022-06-30"
+        "10": "2024-06-30"
+        "11": "2026-06-30"
+        "12": "2028-06-30"
+
+      RedHat:
+        "7": "2024-06-30"
+        "8": "2029-05-31"
+        "9": "2032-05-31"
+
+      CentOS:
+        "7": "2024-06-30"
+        "8": "2021-12-31"
+
+      Rocky:
+        "8": "2029-05-31"
+        "9": "2032-05-31"
+
+      AlmaLinux:
+        "8": "2029-05-31"
+        "9": "2032-05-31"
+
+      SUSE:
+        "12": "2027-10-31"
+        "15": "2031-07-31"
+
+  tasks:
+    - name: Detect OS details
+      set_fact:
+        distro: "{{ ansible_distribution }}"
+        version: "{{ ansible_distribution_version.split('.')[0] }}"
+        eol_date: "{{ eol_dates.get(ansible_distribution, {}).get(version, 'Unknown') }}"
+
+    - name: Show detected OS info
+      debug:
+        msg: "OS: {{ distro }} {{ version }}, EOL Date: {{ eol_date }}"
+
+    - name: Compare with current date
+      set_fact:
+        status: >-
+          {% if eol_date == 'Unknown' %}
+            Unknown (EOL date not in database)
+          {% elif (ansible_date_time.date > eol_date) %}
+            EOL - Upgrade Required!
+          {% else %}
+            Supported until {{ eol_date }}
+          {% endif %}
+
+    - name: Print EOL Status
+      debug:
+        msg: "EOL Status: {{ status }}"
