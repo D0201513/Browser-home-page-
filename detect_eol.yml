@@ -3,7 +3,7 @@
   hosts: Tirumangalam
   gather_facts: yes
   vars:
-    # EOL reference data for Ubuntu versions (update as needed)
+    # Ubuntu EOL dates
     ubuntu_eol_dates:
       "16.04": "2021-04-30"
       "18.04": "2023-05-31"
@@ -11,7 +11,7 @@
       "22.04": "2027-04-30"
       "24.04": "2029-04-30"
 
-    # Other distros (optional)
+    # Other distros
     eol_dates:
       Debian:
         "9": "2022-06-30"
@@ -26,6 +26,14 @@
         "7": "2024-06-30"
         "8": "2021-12-31"
 
+    # Map Ubuntu codenames to version numbers
+    ubuntu_codename_to_version_map:
+      xenial: "16.04"
+      bionic: "18.04"
+      focal: "20.04"
+      jammy: "22.04"
+      noble: "24.04"
+
   tasks:
     - name: Detect OS details safely
       set_fact:
@@ -33,13 +41,13 @@
         version: >-
           {{ (ansible_distribution_version.split('.')[0:2] | join('.'))
              if (ansible_distribution_version is defined) else 'Unknown' }}
-        ubuntu_codename: "{{ lookup('ansible.builtin.env','UBUNTU_CODENAME') | default(ansible_lsb.codename | default('Unknown')) }}"
+        ubuntu_codename: "{{ ansible_lsb.codename | default('Unknown') }}"
 
     - name: Determine EOL date
       set_fact:
         eol_date: >-
           {% if distro == 'Linux Mint' %}
-            {{ ubuntu_eol_dates.get(ubuntu_codename_to_version(ubuntu_codename), 'Unknown') }}
+            {{ ubuntu_eol_dates.get(ubuntu_codename_to_version_map.get(ubuntu_codename | lower, 'Unknown'), 'Unknown') }}
           {% else %}
             {{ eol_dates.get(distro, {}).get(version, 'Unknown') }}
           {% endif %}
@@ -62,19 +70,3 @@
     - name: Print EOL Status
       debug:
         msg: "EOL Status: {{ status }}"
-
-# Helper: map Ubuntu codenames to versions
-# (This can be included in a filter plugin, or you can define as a dict)
-vars_filters:
-  ubuntu_codename_to_version_map:
-    xenial: "16.04"
-    bionic: "18.04"
-    focal: "20.04"
-    jammy: "22.04"
-    noble: "24.04"
-
-# Define a helper function in Jinja2 for mapping
-# This is used in the eol_date calculation above
-filters:
-  ubuntu_codename_to_version: >
-    {{ ubuntu_codename_to_version_map.get(ubuntu_codename | lower, 'Unknown') }}
