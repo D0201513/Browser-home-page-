@@ -42,9 +42,15 @@
   tasks:
     - name: Detect OS details
       set_fact:
-        distro: "{{ ansible_distribution }}"
-        version: "{{ ansible_distribution_version.split('.')[0] }}"
-        eol_date: "{{ eol_dates.get(ansible_distribution, {}).get(version, 'Unknown') }}"
+        distro: "{{ ansible_distribution | default('Unknown') }}"
+        version: >-
+          {{ (ansible_distribution_version.split('.')[0:2] | join('.'))
+             if (ansible_distribution_version is defined) else 'Unknown' }}
+        eol_date: >-
+          {{ eol_dates.get(ansible_distribution | default('Unknown'), {}).get(
+             (ansible_distribution_version.split('.')[0:2] | join('.'))
+             if (ansible_distribution_version is defined) else 'Unknown',
+             'Unknown') }}
 
     - name: Show detected OS info
       debug:
