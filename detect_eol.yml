@@ -11,10 +11,11 @@
       focal: "2025-04-30"
       jammy: "2027-04-30"
       noble: "2029-04-30"
+
     mint_eol_dates:
       uma: "2025-07-31"
       una: "2023-07-31"
-      xia: "Unknown"  # Example; update as needed
+      xia: "Unknown"  # Example; update if Mint publishes official EOL
 
   tasks:
     - name: Detect OS details
@@ -39,10 +40,10 @@
         eol_status: >-
           {% if eol_date == 'Unknown' %}
           Unknown
-          {% elif (ansible_date_time.date | to_datetime('%Y-%m-%d')) > (eol_date | to_datetime('%Y-%m-%d')) %}
+          {% elif (ansible_date_time.date | to_datetime('%Y-%m-%d')) > (eol_date | trim | to_datetime('%Y-%m-%d')) %}
           EOL - Upgrade Required!
           {% else %}
-          Supported
+          Supported until {{ eol_date }}
           {% endif %}
 
     - name: Save EOL status to hostvars
@@ -55,23 +56,4 @@
 
     - name: Debug per-host EOL status
       debug:
-        msg: "EOL Status for {{ inventory_hostname }}: {{ eol_status }}"
-
-- name: Consolidate Linux EOL report
-  hosts: localhost
-  gather_facts: no
-
-  tasks:
-    - name: Build consolidated EOL report
-      run_once: true
-      set_fact:
-        consolidated_report: |
-          | Hostname/IP | OS | Codename | EOL Date | Status |
-          |-------------|----|----------|----------|--------|
-          {% for host in groups['linux_servers'] %}
-          | {{ host }} | {{ hostvars[host].eol_summary.os | default('Unknown') }} | {{ hostvars[host].eol_summary.codename | default('Unknown') }} | {{ hostvars[host].eol_summary.eol_date | default('Unknown') }} | {{ hostvars[host].eol_summary.status | default('⚠️ Unreachable') }} |
-          {% endfor %}
-
-    - name: Print consolidated EOL report
-      debug:
-        msg: "{{ consolidated_report }}"
+        msg: "Host {{ inventory_hostname }} → OS: {{ distro }} {{ version }} ({{ codename }}), Status: {{ eol_status }}"
