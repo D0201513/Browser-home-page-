@@ -1,72 +1,98 @@
 ---
-- name: Detect Linux OS End of Life (EOL) status
-  hosts: Tirumangalam
+- name: Detect Linux OS End of Life (EOL) Status
+  hosts: linux_servers
   gather_facts: yes
+  become: false
   vars:
-    # Ubuntu EOL dates
+    # Example EOL lookup table (update as needed)
     ubuntu_eol_dates:
-      "16.04": "2021-04-30"
-      "18.04": "2023-05-31"
-      "20.04": "2025-04-30"
-      "22.04": "2027-04-30"
-      "24.04": "2029-04-30"
-
-    # Other distros
-    eol_dates:
-      Debian:
-        "9": "2022-06-30"
-        "10": "2024-06-30"
-        "11": "2026-06-30"
-        "12": "2028-06-30"
-      RedHat:
-        "7": "2024-06-30"
-        "8": "2029-05-31"
-        "9": "2032-05-31"
-      CentOS:
-        "7": "2024-06-30"
-        "8": "2021-12-31"
-
-    # Ubuntu codename → version map
-    ubuntu_codename_to_version:
-      xenial: "16.04"
-      bionic: "18.04"
-      focal: "20.04"
-      jammy: "22.04"
-      noble: "24.04"
+      trusty: "2019-04-30"
+      xenial: "2021-04-30"
+      bionic: "2023-04-30"
+      focal: "2025-04-30"
+      jammy: "2027-04-30"
+      noble: "2029-04-30"
+    mint_eol_dates:
+      uma: "2025-07-31"
+      una: "2023-07-31"
+      xia: "Unknown"  # Example; update as needed
 
   tasks:
+
     - name: Detect OS details
       set_fact:
-        distro: "{{ ansible_distribution | default('Unknown') }}"
-        version: "{{ (ansible_distribution_version.split('.')[0:2] | join('.')) if (ansible_distribution_version is defined) else 'Unknown' }}"
-        ubuntu_codename: "{{ ansible_lsb.codename | default('Unknown') }}"
+        distro: "{{ ansible_distribution }}"
+        version: "{{ ansible_distribution_version }}"
+        codename: "{{ ansible_lsb.codename | default('Unknown') }}"
 
     - name: Determine EOL date
       set_fact:
         eol_date: >-
-          {% if distro == 'Linux Mint' %}
-            {{ ubuntu_eol_dates.get(ubuntu_codename_to_version.get(ubuntu_codename | lower, 'Unknown'), 'Unknown') }}
-          {% elif distro == 'Ubuntu' %}
-            {{ ubuntu_eol_dates.get(version, 'Unknown') }}
+          {% if distro == 'Ubuntu' %}
+          {{ ubuntu_eol_dates.get(codename, 'Unknown') }}
+          {% elif distro == 'LinuxMint' %}
+          {{ mint_eol_dates.get(codename, 'Unknown') }}
           {% else %}
-            {{ eol_dates.get(distro, {}).get(version, 'Unknown') }}
+          Unknown
           {% endif %}
-
-    - name: Show detected OS info
-      debug:
-        msg: "OS: {{ distro }} {{ version }}, Ubuntu Codename: {{ ubuntu_codename }}, EOL Date: {{ eol_date }}"
-
-    - name: Compare with current date
-      set_fact:
-        status: >-
+        eol_status: >-
           {% if eol_date == 'Unknown' %}
-            Unknown (EOL date not in database)
-          {% elif (ansible_date_time.date > eol_date) %}
-            EOL - Upgrade Required!
+          Unknown
+          {% elif (ansible_date_time.date | to_datetime('%Y-%m-%d')) > (eol_date | to_datetime('%Y-%m-%d')) %}
+          EOL - Upgrade Required!
           {% else %}
-            Supported until {{ eol_date }}
+          Supported
           {% endif %}
 
-    - name: Print EOL Status
+    - name: Save EOL status to hostvars
+      set_fact:
+        eol_summary:
+          os: "{{ distro }} {{ version }}"
+          codename: "{{ codename }}"
+          eol_date: "{{ eol_date }}"
+          status: "{{ eol_status }}"
+
+    - name: Debug per-host EOL status
       debug:
-        msg: "EOL Status: {{ status }}"
+        msg: "EOL Status: {{ eol_status }}"
+
+- name: Consolidate Linux EOL report and send email
+  hosts: localhost
+  gather_facts: no
+  vars:
+    notification_recipients: "aravind_slcs_intern2@aravind.org,karthikeyan.sudhakar@aravind.org"
+
+  tasks:
+    - name: Build consolidated EOL report
+      run_once: true
+      set_fact:
+        consolidated_report: |
+          | Hostname/IP | OS | Codename | EOL Date | Status |
+          |-------------|----|---------|---------|--------|
+          {% for host in groups['linux_servers'] %}
+          | {{ host }} | {{ hostvars[host].eol_summary.os | default('Unknown') }} | {{ hostvars[host].eol_summary.codename | default('Unknown') }} | {{ hostvars[host].eol_summary.eol_date | default('Unknown') }} | {{ hostvars[host].eol_summary.status | default('⚠️ Unreachable') }} |
+          {% endfor %}
+
+    - name: Print consolidated EOL report
+      debug:
+        msg: "{{ consolidated_report }}"
+
+    - name: Send consolidated EOL notification email
+      community.general.mail:
+        host: smtp.gmail.com
+        port: 587
+        secure: starttls
+        username: "{{ lookup('env', 'EMAIL_USER') }}"
+        password: "{{ lookup('env', 'EMAIL_PASSWORD') }}"
+        to: "{{ notification_recipients }}"
+        from: "{{ lookup('env', 'EMAIL_USER') }}"
+        subject: "📢 Linux EOL Status Report"
+        body: |
+          Hello Team,
+
+          The Linux End-of-Life (EOL) detection has been completed for the server group **linux_servers**.
+
+          {{ consolidated_report }}
+
+          Regards,
+          🔧 Ansible Automation System
