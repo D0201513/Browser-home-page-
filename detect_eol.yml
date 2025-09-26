@@ -1,6 +1,6 @@
 ---
 - name: Detect Linux OS End of Life (EOL) status
-  hosts: linux_servers
+  hosts: Tirumangalam
   gather_facts: yes
   vars:
     # EOL reference data (update as new versions are released)
