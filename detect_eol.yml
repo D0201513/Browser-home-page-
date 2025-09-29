@@ -1,6 +1,6 @@
 ---
 - name: Detect Linux OS End of Life (EOL) Status
-  hosts: Melur
+  hosts: linux_servers
   gather_facts: yes
   become: false
   vars:
