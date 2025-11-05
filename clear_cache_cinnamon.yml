@@ -1,6 +1,6 @@
 ---
 - name: Clear Firefox cache2 directories on Linux for all users
-  hosts: all
+  hosts: Melur
   become: true
   gather_facts: false
 
