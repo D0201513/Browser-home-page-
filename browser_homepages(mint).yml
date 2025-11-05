@@ -4,15 +4,23 @@
   become: yes
   tasks:
 
-    - name: Ensure policy directory exists for Firefox 117
+    - name: Check if distribution directory exists for Firefox 117
+      stat:
+        path: /opt/firefox117/distribution
+      register: dist_dir
+
+    - name: Create distribution directory if it does not exist
       file:
-        path: /opt/firefox117/firefox/distribution
+        path: /opt/firefox117/distribution
         state: directory
         mode: '0755'
+        owner: root
+        group: root
+      when: not dist_dir.stat.exists
 
     - name: Set Firefox policies.json with password manager disabled and locked
       copy:
-        dest: /opt/firefox117/firefox/distribution/policies.json
+        dest: /opt/firefox117/distribution/policies.json
         content: |
           {
             "policies": {
