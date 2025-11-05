@@ -1,6 +1,6 @@
 ---
 - name: Disable and lock Firefox password manager on manually installed Firefox
-  hosts: Tirumangalam
+  hosts: linux_servers
   become: yes
   tasks:
 
