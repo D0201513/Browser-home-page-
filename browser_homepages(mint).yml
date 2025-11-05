@@ -1,6 +1,6 @@
 ---
 - name: Disable and lock Firefox password manager on manually installed Firefox
-  hosts: all
+  hosts: Melur
   become: yes
   tasks:
 
