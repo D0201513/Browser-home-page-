@@ -1,5 +1,5 @@
 ---
-- name: Deploy automatic cache cleanup on wake
+- name: Deploy automatic cache cleanup on boot
   hosts: Tirumangalam
   become: true
   gather_facts: false
@@ -54,7 +54,7 @@
         mode: '0644'
         content: |
           [Unit]
-          Description=Clear cache on resume from suspend
+          Description=Clear cache after system boot
           After=multi-user.target
 
           [Service]
@@ -67,9 +67,9 @@
     - name: Reload systemd daemon
       command: systemctl daemon-reload
 
-    - name: Enable cache-clear-on-wake service
+    - name: Enable cache-clear-on-boot service
       systemd:
-        name: cache-clear-on-wake.service
+        name: cache-clear-on-boot.service
         enabled: true
 
     - name: (Optional) Manually run cleanup once
@@ -87,6 +87,6 @@
         msg:
           - "✅ Cache cleanup script deployed at: {{ cleanup_script_path }}"
           - "✅ Systemd service installed: {{ systemd_service_path }}"
-          - "✅ Service enabled to trigger on wake"
+          - "✅ Service enabled to trigger on boot"
           - "🧾 Last cleanup log entries:"
           - "{{ cleanup_log.stdout_lines | default(['No logs yet']) }}"
