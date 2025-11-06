@@ -11,7 +11,7 @@
       - systemd-network
       - _apt
     cleanup_script_path: /usr/local/bin/clear_cache.sh
-    systemd_service_path: /etc/systemd/system/cache-clear-on-wake.service
+    systemd_service_path: /etc/systemd/system/cache-clear-on-boot.service
     log_file_path: /var/log/cache_cleanup.log
 
   tasks:
@@ -55,14 +55,14 @@
         content: |
           [Unit]
           Description=Clear cache on resume from suspend
-          After=suspend.target
+          After=multi-user.target
 
           [Service]
           Type=oneshot
           ExecStart={{ cleanup_script_path }}
 
           [Install]
-          WantedBy=suspend.target
+          WantedBy=multi-user.target
 
     - name: Reload systemd daemon
       command: systemctl daemon-reload
